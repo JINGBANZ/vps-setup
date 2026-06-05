@@ -11,8 +11,8 @@ else
   ok "Claude Code installed — run 'claude' to sign in"
 fi
 
-# --- Codex CLI (official installer) ----------------------------------------
-if have codex; then
+# --- Codex CLI (official installer; installs to ~/.local/bin/codex) ---------
+if have codex || [ -x "$HOME/.local/bin/codex" ]; then
   skip "codex"
 else
   log "Installing Codex CLI"
