@@ -87,32 +87,51 @@ ask_value() {
   printf '%s' "${reply:-$default}"
 }
 
-# Resolve a usable SSH public key once and cache it. Priority:
-#   1. cached   2. root's authorized_keys   3. target user's   4. interactive paste
+# Only lines starting with a known key type are real keys (skips comments/blanks).
+SSH_KEY_RE='^(ssh-(ed25519|rsa|dss)|ecdsa-sha2-|sk-ssh-ed25519|sk-ecdsa-sha2-)'
+
+# Resolve usable SSH public key(s) once and cache them (newline-separated, may be
+# several). Priority: 1. cached  2. root's authorized_keys  3. target user's
+#   4. interactive paste (validated). Only valid key lines are returned.
 SSH_PUBKEY=""
 get_ssh_public_key() {
   if [ -n "$SSH_PUBKEY" ]; then printf '%s' "$SSH_PUBKEY"; return; fi
-  local k=""
+  local k="" paste
   if $SUDO test -s /root/.ssh/authorized_keys 2>/dev/null; then
-    k="$($SUDO head -n1 /root/.ssh/authorized_keys 2>/dev/null)"
-  elif [ -s "$TARGET_HOME/.ssh/authorized_keys" ]; then
-    k="$(head -n1 "$TARGET_HOME/.ssh/authorized_keys" 2>/dev/null)"
-  elif [ "$INTERACTIVE" -eq 1 ]; then
-    k="$(ask_value '   Paste the SSH PUBLIC key to authorize (e.g. ssh-ed25519 AAAA...):' '')"
+    k="$($SUDO grep -E "$SSH_KEY_RE" /root/.ssh/authorized_keys 2>/dev/null || true)"
+  fi
+  if [ -z "$k" ] && [ -s "$TARGET_HOME/.ssh/authorized_keys" ]; then
+    k="$(grep -E "$SSH_KEY_RE" "$TARGET_HOME/.ssh/authorized_keys" 2>/dev/null || true)"
+  fi
+  if [ -z "$k" ] && [ "$INTERACTIVE" -eq 1 ]; then
+    while :; do
+      paste="$(ask_value '   Paste the SSH PUBLIC key to authorize (e.g. ssh-ed25519 AAAA...):' '')"
+      [ -z "$paste" ] && break
+      # Validate the paste really is a public key before accepting it.
+      if printf '%s\n' "$paste" | ssh-keygen -l -f - >/dev/null 2>&1; then k="$paste"; break; fi
+      warn "That doesn't look like a valid SSH public key — try again (blank to skip)."
+    done
   fi
   SSH_PUBKEY="$k"
   printf '%s' "$k"
 }
 
-# install_authorized_key <user> <pubkey>  -> append the key, fix perms (idempotent)
+# install_authorized_key <user> <pubkeys>  -> append each key line (deduped),
+# fix perms (700 dir / 600 file, owned by user). Idempotent.
 install_authorized_key() {
-  local user="$1" key="$2" home
+  local user="$1" keys="$2" home line ak
   home="$(getent passwd "$user" | cut -d: -f6)"
   [ -n "$home" ] || return 1
+  ak="$home/.ssh/authorized_keys"
   $SUDO install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
-  if ! $SUDO grep -qsF "$key" "$home/.ssh/authorized_keys" 2>/dev/null; then
-    printf '%s\n' "$key" | $SUDO tee -a "$home/.ssh/authorized_keys" >/dev/null
-  fi
-  $SUDO chown "$user:$user" "$home/.ssh/authorized_keys"
-  $SUDO chmod 600 "$home/.ssh/authorized_keys"
+  $SUDO touch "$ak"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    $SUDO grep -qsF "$line" "$ak" 2>/dev/null && continue
+    printf '%s\n' "$line" | $SUDO tee -a "$ak" >/dev/null
+  done <<EOF
+$keys
+EOF
+  $SUDO chown "$user:$user" "$ak"
+  $SUDO chmod 600 "$ak"
 }

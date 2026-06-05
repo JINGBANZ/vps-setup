@@ -117,6 +117,10 @@ password authentication so only SSH keys work. **Root is never locked out:**
   password authentication on** rather than risk a lockout.
 - The drop-in is only (re)written when it differs, validated with `sshd -t`, and
   reverted if invalid — so re-runs don't reload sshd unless something changed.
+- It's named `00-hardening.conf` so it wins SSH's *first-match* precedence over
+  Ubuntu's `50-cloud-init.conf` (which may re-enable passwords). After reload the
+  script runs `sshd -T` to confirm password auth is actually off, and warns if
+  another drop-in still overrides it.
 
 ### Non-root admin user (prompted)
 
