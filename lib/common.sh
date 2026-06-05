@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# lib/common.sh — shared helpers and environment. Sourced by setup.sh before any
-# module; not meant to be run directly.
+# lib/common.sh — shared helpers, config knobs, and environment detection.
+# Sourced by setup.sh before any module. Not meant to be run directly.
 #
 # Modules rely on everything defined here: log/skip/ok/warn, SUDO, have(),
-# TARGET_USER/TARGET_HOME, require_apt, and the settings near the bottom.
+# TARGET_USER/TARGET_HOME, write_config, and the configurable knobs below.
 
 # Mark that common was loaded, so modules can refuse to run standalone.
 _VPS_COMMON_LOADED=1
@@ -21,8 +21,8 @@ if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# The user we install user-level tools for. Under sudo this is the original
-# login user, not root.
+# The user we install user-level tools for / harden SSH for. Under sudo this is
+# the original login user, not root.
 TARGET_USER="${SUDO_USER:-$(id -un)}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 [ -n "$TARGET_HOME" ] || TARGET_HOME="$HOME"
@@ -53,6 +53,93 @@ write_config() {
   return 0                                              # changed
 }
 
-# --- settings (sane defaults; override via env) ---------------------------
-NVM_VERSION="${NVM_VERSION:-v0.40.5}"   # pinned nvm release
-SSH_PORT="${SSH_PORT:-22}"               # firewall/fail2ban target port
+# --- settings (sane defaults; rarely changed) -----------------------------
+# These are configuration values, not feature toggles — opt-in/out of features
+# happens through interactive prompts, not flags.
+NVM_VERSION="${NVM_VERSION:-v0.40.5}"      # pinned nvm release
+SSH_PORT="${SSH_PORT:-22}"                  # firewall/fail2ban target port
+
+# --- interactivity --------------------------------------------------------
+# Optional features ask before acting. Prompts read/write /dev/tty so they work
+# even under the tee redirect and when piped (curl | bash). With no terminal
+# (cron/CI) INTERACTIVE=0 and every prompt falls back to its default.
+INTERACTIVE=0
+if { : </dev/tty; } 2>/dev/null; then INTERACTIVE=1; fi
+
+# ask_yes_no "Question?" [default y|n]  -> exit 0 = yes, 1 = no
+ask_yes_no() {
+  local prompt="$1" default="${2:-n}" reply hint
+  if [ "$INTERACTIVE" -ne 1 ]; then [ "$default" = "y" ]; return; fi
+  hint="[y/N]"; [ "$default" = "y" ] && hint="[Y/n]"
+  printf '\033[1;36m??\033[0m %s %s ' "$prompt" "$hint" >/dev/tty
+  read -r reply </dev/tty || reply=""
+  reply="${reply:-$default}"
+  case "$reply" in [Yy]*) return 0;; *) return 1;; esac
+}
+
+# ask_value "Prompt" [default]  -> echoes the entered value (or default)
+ask_value() {
+  local prompt="$1" default="${2:-}" reply
+  if [ "$INTERACTIVE" -ne 1 ]; then printf '%s' "$default"; return; fi
+  if [ -n "$default" ]; then printf '\033[1;36m??\033[0m %s [%s] ' "$prompt" "$default" >/dev/tty
+  else printf '\033[1;36m??\033[0m %s ' "$prompt" >/dev/tty; fi
+  read -r reply </dev/tty || reply=""
+  printf '%s' "${reply:-$default}"
+}
+
+# A valid authorized_keys line carries a key-type token as a whitespace-delimited
+# field — at the line start, OR after an options field (e.g. restrict,from="...").
+# Comment (#) and blank lines are excluded separately by extract_keys.
+SSH_KEY_RE='(^|[[:space:]])(ssh-(ed25519|rsa|dss)|ecdsa-sha2-|sk-ssh-ed25519|sk-ecdsa-sha2-)'
+
+# extract_keys <file>  -> the valid key lines of an authorized_keys file (skips
+# comments/blanks, allows a leading options field). $SUDO so it reads root's file.
+extract_keys() {
+  $SUDO grep -vE '^[[:space:]]*(#|$)' "$1" 2>/dev/null | grep -E "$SSH_KEY_RE" || true
+}
+
+# Resolve usable SSH public key(s) once and cache them (newline-separated, may be
+# several). Priority: 1. cached  2. root's authorized_keys  3. target user's
+#   4. interactive paste (validated). Only valid key lines are returned.
+SSH_PUBKEY=""
+get_ssh_public_key() {
+  if [ -n "$SSH_PUBKEY" ]; then printf '%s' "$SSH_PUBKEY"; return; fi
+  local k="" paste
+  if $SUDO test -s /root/.ssh/authorized_keys 2>/dev/null; then
+    k="$(extract_keys /root/.ssh/authorized_keys)"
+  fi
+  if [ -z "$k" ] && [ -s "$TARGET_HOME/.ssh/authorized_keys" ]; then
+    k="$(extract_keys "$TARGET_HOME/.ssh/authorized_keys")"
+  fi
+  if [ -z "$k" ] && [ "$INTERACTIVE" -eq 1 ]; then
+    while :; do
+      paste="$(ask_value '   Paste the SSH PUBLIC key to authorize (e.g. ssh-ed25519 AAAA...):' '')"
+      [ -z "$paste" ] && break
+      # Validate the paste really is a public key before accepting it.
+      if printf '%s\n' "$paste" | ssh-keygen -l -f - >/dev/null 2>&1; then k="$paste"; break; fi
+      warn "That doesn't look like a valid SSH public key — try again (blank to skip)."
+    done
+  fi
+  SSH_PUBKEY="$k"
+  printf '%s' "$k"
+}
+
+# install_authorized_key <user> <pubkeys>  -> append each key line (deduped),
+# fix perms (700 dir / 600 file, owned by user). Idempotent.
+install_authorized_key() {
+  local user="$1" keys="$2" home line ak
+  home="$(getent passwd "$user" | cut -d: -f6)"
+  [ -n "$home" ] || return 1
+  ak="$home/.ssh/authorized_keys"
+  $SUDO install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+  $SUDO touch "$ak"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    $SUDO grep -qsF "$line" "$ak" 2>/dev/null && continue
+    printf '%s\n' "$line" | $SUDO tee -a "$ak" >/dev/null
+  done <<EOF
+$keys
+EOF
+  $SUDO chown "$user:$user" "$ak"
+  $SUDO chmod 600 "$ak"
+}

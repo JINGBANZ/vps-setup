@@ -2,8 +2,8 @@
 #
 # setup.sh — provision a fresh Debian/Ubuntu VPS for an AI-assisted dev workflow.
 #
-# Thin orchestrator: sources shared helpers (lib/common.sh), then runs each
-# module in modules/ in filename order. Each module is self-contained and
+# This is a thin orchestrator: it sources shared helpers (lib/common.sh) and then
+# runs each module in modules/ in order. Each module is self-contained and
 # idempotent (checks-then-installs), so the whole script is safe to re-run.
 #
 #   modules/10-apt-tools.sh    git, curl, unzip, tmux, mosh, ufw   (apt)
@@ -14,6 +14,12 @@
 #   modules/60-firewall.sh     ufw (default-deny, SSH/mosh/tailscale allowed)
 #   modules/70-fail2ban.sh     fail2ban sshd jail
 #   modules/80-auto-updates.sh unattended-upgrades (auto security patches)
+#   modules/90-admin-user.sh   non-root sudo user        (prompts; opt-in)
+#   modules/99-ssh-harden.sh   key-only SSH              (prompts; never locks root out)
+#
+# Optional features (admin user, SSH hardening) ASK before acting — no flags to
+# remember. On a non-interactive run (cron/CI) they fall back to safe defaults
+# (skip admin user; harden only if a key already exists).
 #
 # Usage:
 #   ./setup.sh                 # add sudo if you're not root
@@ -43,9 +49,9 @@ done
 
 # ---------------------------------------------------------------------------
 log "Setup complete."
-cat <<'EOF'
+cat <<EOF
 
-Open a new shell (or `source ~/.bashrc`) so PATH changes take effect.
+Open a new shell (or \`source ~/.bashrc\`) so PATH changes take effect.
 
 Manual auth steps, as needed:
   - tailscale:  sudo tailscale up
@@ -53,6 +59,7 @@ Manual auth steps, as needed:
   - claude:     claude     (sign in on first run)
   - codex:      codex      (sign in with ChatGPT)
 
-Baseline security applied: ufw firewall, fail2ban, and automatic security
-updates.
+Security applied: ufw firewall, fail2ban, and automatic security updates.
+If you created an admin user, VERIFY 'ssh <user>@<host>' and 'sudo -v' work
+before logging out. Root remains reachable by key as a fallback.
 EOF
