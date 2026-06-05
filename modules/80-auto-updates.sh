@@ -8,9 +8,14 @@ if ! dpkg -s unattended-upgrades >/dev/null 2>&1; then
 fi
 
 # Enable the daily apt timers that drive unattended security upgrades.
-$SUDO tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null <<'EOF'
+# Written only if it differs from the current config.
+if write_config /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 EOF
+then
+  ok "unattended-upgrades enabled (security patches install automatically)"
+else
+  skip "unattended-upgrades (already configured)"
+fi
 $SUDO systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
-ok "unattended-upgrades enabled (security patches install automatically)"

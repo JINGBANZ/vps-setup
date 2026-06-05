@@ -6,9 +6,10 @@ if ! have fail2ban-client; then
   log "Installing fail2ban"
   $SUDO apt-get install -y fail2ban >/dev/null
 fi
+$SUDO systemctl enable --now fail2ban >/dev/null 2>&1 || true
 
-log "Configuring fail2ban sshd jail"
-$SUDO tee /etc/fail2ban/jail.local >/dev/null <<EOF
+# Write the jail only if it differs, and restart fail2ban ONLY when it changed.
+if write_config /etc/fail2ban/jail.local <<EOF
 # Managed by vps-setup/setup.sh
 [sshd]
 enabled  = true
@@ -18,6 +19,10 @@ maxretry = 3
 findtime = 1h
 bantime  = 24h
 EOF
-$SUDO systemctl enable --now fail2ban >/dev/null 2>&1 || true
-$SUDO systemctl restart fail2ban      >/dev/null 2>&1 || true
-ok "fail2ban active (3 fails/hour -> 24h ban)"
+then
+  log "Configuring fail2ban sshd jail"
+  $SUDO systemctl restart fail2ban >/dev/null 2>&1 || true
+  ok "fail2ban active (3 fails/hour -> 24h ban)"
+else
+  skip "fail2ban jail (already configured)"
+fi

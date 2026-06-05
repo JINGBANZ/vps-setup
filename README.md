@@ -63,11 +63,12 @@ These are pure-win and carry no lockout risk, so they always run:
 
 ### It's safe to re-run (idempotent)
 
-Every module **checks whether the tool already exists and skips it if so**, and
-the security config files are simply rewritten to the same content. Re-running on
-an already-set-up box changes nothing — it just prints `skipping` for each tool.
-You can re-run any time to fill in whatever's missing without risk of duplicate
-installs.
+Every module **checks whether the tool already exists and skips it if so**. The
+security config files are managed with `write_config`, which **only rewrites a
+file when its content actually differs** — so a no-op re-run touches no files and
+restarts no services (fail2ban is only restarted when its jail changed).
+Re-running on an already-set-up box changes nothing; you can re-run any time to
+fill in whatever's missing without risk of duplicate installs.
 
 ## Tools installed
 
