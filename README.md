@@ -38,7 +38,7 @@ When you run `setup.sh`, it works through the following steps in order:
 5. **Installs Tailscale** via the official `tailscale.com/install.sh` script.
 6. **Installs `nvm`** (Node Version Manager) from the official pinned release,
    then sources it into the current shell so it's usable immediately.
-7. **Installs Node.js (LTS)** through nvm (`nvm install --lts`) and sets it as the
+7. **Installs Node.js (LTS)** through nvm (`nvm install --latest-npm 'lts/*'`) and sets it as the
    default version.
 8. **Installs Bun** via the official `bun.com/install` script. (This is why
    `unzip` is installed first — Bun's installer requires it.)
@@ -74,7 +74,7 @@ that workflow is listed alongside the official install method it uses.
 | Claude Code | AI coding agent | `curl -fsSL https://claude.ai/install.sh \| bash` (native installer) |
 | Codex CLI | AI coding agent | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` |
 | nvm | Manages the Node runtime the agents/tooling need | `nvm-sh` versioned `install.sh` (pinned to `v0.40.5`) |
-| Node.js (LTS) | JS/TS runtime the agents and their tooling run on | `nvm install --lts` |
+| Node.js (LTS) | JS/TS runtime the agents and their tooling run on | `nvm install --latest-npm 'lts/*'` |
 | Bun | Fast JS/TS runtime & package manager for agent tooling | `curl -fsSL https://bun.com/install \| bash` |
 | gh (GitHub CLI) | Lets agents drive GitHub (PRs, issues, repos) from CLI | `cli.github.com` signed apt repo (official) |
 | tmux | Keeps long-running agent sessions alive after disconnects | `apt` — official on Debian/Ubuntu |
@@ -91,7 +91,7 @@ follows upstream best practice.
 ### Install order notes
 
 - `unzip` is installed (via apt) **before Bun**, because Bun's installer requires it.
-- `nvm` is installed **before Node.js**, then sourced so `nvm install --lts` works
+- `nvm` is installed **before Node.js**, then sourced so `nvm install` works
   in the same run.
 
 ## Manual steps after running

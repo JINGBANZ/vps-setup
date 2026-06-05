@@ -94,7 +94,9 @@ fi
 # ---------------------------------------------------------------------------
 # 4. nvm  (official: nvm-sh versioned installer)
 # ---------------------------------------------------------------------------
-export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# Resolve NVM_DIR the same way nvm's official profile snippet does (honors
+# XDG_CONFIG_HOME, falling back to ~/.nvm).
+export NVM_DIR="${NVM_DIR:-$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")}"
 if [ -s "$NVM_DIR/nvm.sh" ]; then
   skip "nvm"
 else
@@ -108,7 +110,7 @@ fi
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
 # ---------------------------------------------------------------------------
-# 5. Node.js (LTS)  (official via nvm: nvm install --lts)
+# 5. Node.js (LTS)  (official via nvm: nvm install --latest-npm 'lts/*')
 # ---------------------------------------------------------------------------
 if have nvm && nvm which current >/dev/null 2>&1; then
   skip "Node.js ($(node --version 2>/dev/null))"
@@ -116,7 +118,7 @@ elif have node; then
   skip "Node.js ($(node --version)) — found outside nvm"
 else
   log "Installing Node.js LTS via nvm"
-  nvm install --lts
+  nvm install --latest-npm 'lts/*'   # official nvm recipe for latest LTS + npm
   nvm alias default 'lts/*'
   ok "Node.js installed ($(node --version 2>/dev/null))"
 fi
