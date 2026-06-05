@@ -11,58 +11,46 @@ coding agents without manually running a dozen install commands. The toolset:
 - **tmux** + **mosh** — keep long-running agent sessions alive across flaky/
   disconnected SSH connections, so a session survives a dropped link.
 - **Tailscale** — private, secure network access to the VPS from anywhere.
-- **ufw** — a basic firewall so the box is sensible to expose.
+- **ufw** — a firewall, installed here (configured in a later change).
 - **git / curl / unzip** — the baseline plumbing everything else relies on.
 
 ## Quick start
 
 ```bash
+git clone https://github.com/JINGBANZ/vps-setup.git && cd vps-setup
 ./setup.sh        # add sudo if you're not root
-source ~/.bashrc  # pick up new PATH entries (nvm, bun, claude, codex)
+source ~/.bashrc  # pick up new PATH (nvm, bun, claude, codex)
 ```
 
-## What the script does
+## Project structure
 
-When you run `setup.sh`, it works through the following steps in order:
+The script is modular: a thin orchestrator sources shared helpers, then runs each
+module in `modules/` in filename order. To change one concern, edit one file.
 
-1. **Checks the platform.** Confirms `apt-get` exists (Debian/Ubuntu). If not, it
-   exits early rather than doing anything unexpected on an unsupported distro.
-2. **Decides on `sudo`.** If you're already root it runs commands directly;
-   otherwise it prefixes privileged commands with `sudo`.
-3. **Installs the apt tools** — `git`, `curl`, `unzip`, `tmux`, `mosh`, `ufw`.
-   It first filters the list down to only what's missing, and runs
-   `apt-get update` + `install` only if there's actually something to install.
-4. **Installs `gh` (GitHub CLI)** from GitHub's official signed apt repository —
-   adds the keyring to `/etc/apt/keyrings`, writes the repo to
-   `/etc/apt/sources.list.d/github-cli.list`, then installs.
-5. **Installs Tailscale** via the official `tailscale.com/install.sh` script.
-6. **Installs `nvm`** (Node Version Manager) from the official pinned release,
-   then sources it into the current shell so it's usable immediately.
-7. **Installs Node.js (LTS)** through nvm (`nvm install --latest-npm 'lts/*'`) and sets it as the
-   default version.
-8. **Installs Bun** via the official `bun.com/install` script. (This is why
-   `unzip` is installed first — Bun's installer requires it.)
-9. **Installs Claude Code** using the official native installer.
-10. **Installs Codex CLI** using OpenAI's official install script.
-11. **Prints next steps** — a reminder to reload your shell and the manual
-    authentication commands listed below.
+```
+setup.sh              # orchestrator: sources lib, loops over modules/, logs output
+lib/
+  common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
+modules/
+  10-apt-tools.sh     # git, curl, unzip, tmux, mosh, ufw
+  20-gh.sh            # GitHub CLI (signed apt repo)
+  30-tailscale.sh     # Tailscale
+  40-node-bun.sh      # nvm + Node.js (LTS) + Bun
+  50-agents.sh        # Claude Code + Codex CLI
+```
+
+Modules run in order, so dependencies are guaranteed (e.g. `unzip` before Bun).
+Adding a step is just dropping a numbered file into `modules/`.
+
+Everything the script prints is also appended to a logfile (`~/vps-setup.log` by
+default, override with `LOGFILE=...`), so a failed run can be inspected afterward.
 
 ### It's safe to re-run (idempotent)
 
-Every step **checks whether the tool already exists and skips it if so**. Running
-the script a second time on an already-set-up box installs nothing — it just
-prints `already installed, skipping` for each tool. This means you can re-run it
-any time to fill in whatever's missing without risk of duplicate installs.
-
-### What it does *not* do
-
-- It does **not** install anything outside the list below.
-- It does **not** perform interactive logins — those are left to you (see
-  [Manual steps](#manual-steps-after-running)), because they require a browser /
-  account and can't be safely scripted.
-- It does **not** modify your dotfiles beyond what each official installer does
-  on its own (the nvm/bun/claude/codex installers append their own PATH lines to
-  `~/.bashrc`).
+Every module **checks whether the tool already exists and skips it if so**.
+Re-running on an already-set-up box installs nothing — it just prints
+`skipping` for each tool. You can re-run any time to fill in whatever's missing
+without risk of duplicate installs.
 
 ## Tools installed
 
@@ -80,7 +68,7 @@ that workflow is listed alongside the official install method it uses.
 | tmux | Keeps long-running agent sessions alive after disconnects | `apt` — official on Debian/Ubuntu |
 | mosh | Resilient SSH for agent sessions over flaky links | `apt` — official on Debian/Ubuntu |
 | Tailscale | Private, secure remote access to the agent box | `curl -fsSL https://tailscale.com/install.sh \| sh` |
-| ufw | Basic firewall so the box is safe to expose | `apt` — official on Debian/Ubuntu |
+| ufw | Firewall (installed here; configured in a later change) | `apt` — official on Debian/Ubuntu |
 | git | Version control the agents operate on | `apt` — official on Debian/Ubuntu |
 | curl | Fetches the other installers; agent HTTP plumbing | `apt` — official on Debian/Ubuntu |
 | unzip | Required by Bun's installer; general unpacking | `apt` — official on Debian/Ubuntu |
@@ -105,5 +93,7 @@ These need interactive auth and aren't automated:
 
 ## Customizing
 
-- Pin a different nvm release by editing `NVM_VERSION` at the top of `setup.sh`.
-- To add or remove an apt tool, edit the `APT_PKGS` array.
+- Pin a different nvm release with `NVM_VERSION=v0.40.x ./setup.sh`.
+- To add or remove a base apt tool, edit the `APT_PKGS` array in
+  `modules/10-apt-tools.sh`. To add a whole new step, drop a numbered file into
+  `modules/`.
