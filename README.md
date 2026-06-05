@@ -44,8 +44,30 @@ When you run `setup.sh`, it works through the following steps in order:
    `unzip` is installed first — Bun's installer requires it.)
 9. **Installs Claude Code** using the official native installer.
 10. **Installs Codex CLI** using OpenAI's official install script.
-11. **Prints next steps** — a reminder to reload your shell and the manual
+11. **Applies the security layer** (see below) — firewall, fail2ban, automatic
+    security updates, and key-only SSH.
+12. **Prints next steps** — a reminder to reload your shell and the manual
     authentication commands listed below.
+
+Everything the script prints is also appended to a logfile (`~/vps-setup.log` by
+default), so a failed run can be inspected afterward.
+
+### Security hardening (always applied)
+
+Security is **not optional** — these run on every invocation:
+
+- **ufw firewall** — default-deny inbound. SSH, mosh, and the `tailscale0`
+  interface are allowed *before* the firewall is enabled, so it can't lock you
+  out.
+- **fail2ban** — bans an IP for 24h after 3 failed SSH logins in an hour,
+  blunting brute-force attacks.
+- **unattended-upgrades** — security patches install automatically via the daily
+  apt timer.
+- **SSH hardening** — disables password authentication (key-only) and restricts
+  root to key-only login. **Guarded:** if no SSH `authorized_keys` is found for
+  root or your user, this step is **skipped** so you're never locked out — add
+  your key with `ssh-copy-id` and re-run to enable it. The new `sshd` config is
+  validated with `sshd -t` before reload and reverted if invalid.
 
 ### It's safe to re-run (idempotent)
 
@@ -56,13 +78,16 @@ any time to fill in whatever's missing without risk of duplicate installs.
 
 ### What it does *not* do
 
-- It does **not** install anything outside the list below.
+- It does **not** install developer tooling outside the list below.
 - It does **not** perform interactive logins — those are left to you (see
   [Manual steps](#manual-steps-after-running)), because they require a browser /
   account and can't be safely scripted.
 - It does **not** modify your dotfiles beyond what each official installer does
   on its own (the nvm/bun/claude/codex installers append their own PATH lines to
   `~/.bashrc`).
+- It does **not** create a non-root admin user. Running as a non-root user with
+  `sudo` is recommended; the script works either way, but that user setup is
+  left to you.
 
 ## Tools installed
 
@@ -80,7 +105,7 @@ that workflow is listed alongside the official install method it uses.
 | tmux | Keeps long-running agent sessions alive after disconnects | `apt` — official on Debian/Ubuntu |
 | mosh | Resilient SSH for agent sessions over flaky links | `apt` — official on Debian/Ubuntu |
 | Tailscale | Private, secure remote access to the agent box | `curl -fsSL https://tailscale.com/install.sh \| sh` |
-| ufw | Basic firewall so the box is safe to expose | `apt` — official on Debian/Ubuntu |
+| ufw | Firewall — configured default-deny and enabled (see Security) | `apt` — official on Debian/Ubuntu |
 | git | Version control the agents operate on | `apt` — official on Debian/Ubuntu |
 | curl | Fetches the other installers; agent HTTP plumbing | `apt` — official on Debian/Ubuntu |
 | unzip | Required by Bun's installer; general unpacking | `apt` — official on Debian/Ubuntu |
@@ -107,3 +132,6 @@ These need interactive auth and aren't automated:
 
 - Pin a different nvm release by editing `NVM_VERSION` at the top of `setup.sh`.
 - To add or remove an apt tool, edit the `APT_PKGS` array.
+- If SSH runs on a non-standard port, run with `SSH_PORT=2222 ./setup.sh` so the
+  firewall and fail2ban open/watch the right port.
+- Change the logfile location with `LOGFILE=/path/to/log ./setup.sh`.
