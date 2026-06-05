@@ -40,6 +40,9 @@ require_apt() {
 # Returns 0 if it changed the file, 1 if it was already up to date — so callers
 # can reload/restart services only on a real change (no needless churn on re-run).
 # For NON-SECRET config only: the content briefly lives in a user-owned temp file.
+#
+# MUST be used in a conditional (`if write_config ...; then`) — the "unchanged"
+# return of 1 would otherwise abort the script under `set -e`.
 write_config() {
   local path="$1" mode="${2:-0644}" tmp
   tmp="$(mktemp)"
