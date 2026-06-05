@@ -14,15 +14,16 @@
 #   modules/60-firewall.sh     ufw (default-deny, SSH/mosh/tailscale allowed)
 #   modules/70-fail2ban.sh     fail2ban sshd jail
 #   modules/80-auto-updates.sh unattended-upgrades (auto security patches)
-#   modules/90-admin-user.sh   non-root sudo user        (when ADMIN_USER set)
-#   modules/99-ssh-harden.sh   key-only SSH              (guarded; no lockout)
+#   modules/90-admin-user.sh   non-root sudo user        (prompts; opt-in)
+#   modules/99-ssh-harden.sh   key-only SSH              (prompts; never locks root out)
+#
+# Optional features (admin user, SSH hardening) ASK before acting — no flags to
+# remember. On a non-interactive run (cron/CI) they fall back to safe defaults
+# (skip admin user; harden only if a key already exists).
 #
 # Usage:
-#   ./setup.sh                          # tools + security
-#   ADMIN_USER=deploy ./setup.sh        # also create a non-root sudo user
-#   SSH_PORT=2222 ./setup.sh            # non-standard SSH port
-# See README.md for all env knobs (ADMIN_SSH_KEY, ADMIN_NOPASSWD_SUDO,
-# DISABLE_ROOT_LOGIN, NVM_VERSION, LOGFILE).
+#   ./setup.sh                 # add sudo if you're not root
+#   SSH_PORT=2222 ./setup.sh   # only if SSH runs on a non-standard port
 #
 set -euo pipefail
 
@@ -58,7 +59,7 @@ Manual auth steps, as needed:
   - claude:     claude     (sign in on first run)
   - codex:      codex      (sign in with ChatGPT)
 
-Security applied: ufw firewall, fail2ban, automatic security updates, and
-key-only SSH. If you created an admin user, VERIFY 'ssh ${ADMIN_USER:-<user>}@<host>'
-and 'sudo -v' work before disabling root login (DISABLE_ROOT_LOGIN=1).
+Security applied: ufw firewall, fail2ban, and automatic security updates.
+If you created an admin user, VERIFY 'ssh <user>@<host>' and 'sudo -v' work
+before logging out. Root remains reachable by key as a fallback.
 EOF

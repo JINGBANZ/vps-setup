@@ -35,10 +35,66 @@ require_apt() {
   fi
 }
 
-# --- configurable knobs (override via env) --------------------------------
+# --- settings (sane defaults; rarely changed) -----------------------------
+# These are configuration values, not feature toggles — opt-in/out of features
+# happens through interactive prompts, not flags.
 NVM_VERSION="${NVM_VERSION:-v0.40.5}"      # pinned nvm release
 SSH_PORT="${SSH_PORT:-22}"                  # firewall/fail2ban target port
-ADMIN_USER="${ADMIN_USER:-}"                # set to create a non-root sudo user
-ADMIN_SSH_KEY="${ADMIN_SSH_KEY:-}"          # explicit public key for that user
-ADMIN_NOPASSWD_SUDO="${ADMIN_NOPASSWD_SUDO:-0}"  # 1 = passwordless sudo
-DISABLE_ROOT_LOGIN="${DISABLE_ROOT_LOGIN:-0}"    # 1 = PermitRootLogin no
+
+# --- interactivity --------------------------------------------------------
+# Optional features ask before acting. Prompts read/write /dev/tty so they work
+# even under the tee redirect and when piped (curl | bash). With no terminal
+# (cron/CI) INTERACTIVE=0 and every prompt falls back to its default.
+INTERACTIVE=0
+if { : </dev/tty; } 2>/dev/null; then INTERACTIVE=1; fi
+
+# ask_yes_no "Question?" [default y|n]  -> exit 0 = yes, 1 = no
+ask_yes_no() {
+  local prompt="$1" default="${2:-n}" reply hint
+  if [ "$INTERACTIVE" -ne 1 ]; then [ "$default" = "y" ]; return; fi
+  hint="[y/N]"; [ "$default" = "y" ] && hint="[Y/n]"
+  printf '\033[1;36m??\033[0m %s %s ' "$prompt" "$hint" >/dev/tty
+  read -r reply </dev/tty || reply=""
+  reply="${reply:-$default}"
+  case "$reply" in [Yy]*) return 0;; *) return 1;; esac
+}
+
+# ask_value "Prompt" [default]  -> echoes the entered value (or default)
+ask_value() {
+  local prompt="$1" default="${2:-}" reply
+  if [ "$INTERACTIVE" -ne 1 ]; then printf '%s' "$default"; return; fi
+  if [ -n "$default" ]; then printf '\033[1;36m??\033[0m %s [%s] ' "$prompt" "$default" >/dev/tty
+  else printf '\033[1;36m??\033[0m %s ' "$prompt" >/dev/tty; fi
+  read -r reply </dev/tty || reply=""
+  printf '%s' "${reply:-$default}"
+}
+
+# Resolve a usable SSH public key once and cache it. Priority:
+#   1. cached   2. root's authorized_keys   3. target user's   4. interactive paste
+SSH_PUBKEY=""
+get_ssh_public_key() {
+  if [ -n "$SSH_PUBKEY" ]; then printf '%s' "$SSH_PUBKEY"; return; fi
+  local k=""
+  if $SUDO test -s /root/.ssh/authorized_keys 2>/dev/null; then
+    k="$($SUDO head -n1 /root/.ssh/authorized_keys 2>/dev/null)"
+  elif [ -s "$TARGET_HOME/.ssh/authorized_keys" ]; then
+    k="$(head -n1 "$TARGET_HOME/.ssh/authorized_keys" 2>/dev/null)"
+  elif [ "$INTERACTIVE" -eq 1 ]; then
+    k="$(ask_value '   Paste the SSH PUBLIC key to authorize (e.g. ssh-ed25519 AAAA...):' '')"
+  fi
+  SSH_PUBKEY="$k"
+  printf '%s' "$k"
+}
+
+# install_authorized_key <user> <pubkey>  -> append the key, fix perms (idempotent)
+install_authorized_key() {
+  local user="$1" key="$2" home
+  home="$(getent passwd "$user" | cut -d: -f6)"
+  [ -n "$home" ] || return 1
+  $SUDO install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+  if ! $SUDO grep -qsF "$key" "$home/.ssh/authorized_keys" 2>/dev/null; then
+    printf '%s\n' "$key" | $SUDO tee -a "$home/.ssh/authorized_keys" >/dev/null
+  fi
+  $SUDO chown "$user:$user" "$home/.ssh/authorized_keys"
+  $SUDO chmod 600 "$home/.ssh/authorized_keys"
+}
