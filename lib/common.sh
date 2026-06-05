@@ -87,8 +87,16 @@ ask_value() {
   printf '%s' "${reply:-$default}"
 }
 
-# Only lines starting with a known key type are real keys (skips comments/blanks).
-SSH_KEY_RE='^(ssh-(ed25519|rsa|dss)|ecdsa-sha2-|sk-ssh-ed25519|sk-ecdsa-sha2-)'
+# A valid authorized_keys line carries a key-type token as a whitespace-delimited
+# field — at the line start, OR after an options field (e.g. restrict,from="...").
+# Comment (#) and blank lines are excluded separately by extract_keys.
+SSH_KEY_RE='(^|[[:space:]])(ssh-(ed25519|rsa|dss)|ecdsa-sha2-|sk-ssh-ed25519|sk-ecdsa-sha2-)'
+
+# extract_keys <file>  -> the valid key lines of an authorized_keys file (skips
+# comments/blanks, allows a leading options field). $SUDO so it reads root's file.
+extract_keys() {
+  $SUDO grep -vE '^[[:space:]]*(#|$)' "$1" 2>/dev/null | grep -E "$SSH_KEY_RE" || true
+}
 
 # Resolve usable SSH public key(s) once and cache them (newline-separated, may be
 # several). Priority: 1. cached  2. root's authorized_keys  3. target user's
@@ -98,10 +106,10 @@ get_ssh_public_key() {
   if [ -n "$SSH_PUBKEY" ]; then printf '%s' "$SSH_PUBKEY"; return; fi
   local k="" paste
   if $SUDO test -s /root/.ssh/authorized_keys 2>/dev/null; then
-    k="$($SUDO grep -E "$SSH_KEY_RE" /root/.ssh/authorized_keys 2>/dev/null || true)"
+    k="$(extract_keys /root/.ssh/authorized_keys)"
   fi
   if [ -z "$k" ] && [ -s "$TARGET_HOME/.ssh/authorized_keys" ]; then
-    k="$(grep -E "$SSH_KEY_RE" "$TARGET_HOME/.ssh/authorized_keys" 2>/dev/null || true)"
+    k="$(extract_keys "$TARGET_HOME/.ssh/authorized_keys")"
   fi
   if [ -z "$k" ] && [ "$INTERACTIVE" -eq 1 ]; then
     while :; do

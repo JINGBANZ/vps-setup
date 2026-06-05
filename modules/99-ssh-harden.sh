@@ -16,8 +16,8 @@
 
 HARDENING_CONF=/etc/ssh/sshd_config.d/00-hardening.conf
 
-# True if root has at least one *valid* key (not just a non-empty file).
-root_has_key() { $SUDO grep -qsE "$SSH_KEY_RE" /root/.ssh/authorized_keys 2>/dev/null; }
+# True if root has at least one *valid* key (not a comment/blank/options-only line).
+root_has_key() { [ -n "$(extract_keys /root/.ssh/authorized_keys)" ]; }
 
 if ! ask_yes_no "Harden SSH to key-only login (disable password auth)?" "y"; then
   skip "SSH hardening (declined) — password login left enabled"
@@ -55,11 +55,18 @@ then
   if $SUDO sshd -t; then
     $SUDO systemctl reload-or-restart ssh  >/dev/null 2>&1 \
       || $SUDO systemctl reload-or-restart sshd >/dev/null 2>&1 || true
-    # Assert the setting actually took effect — another drop-in could override it.
-    if $SUDO sshd -T 2>/dev/null | grep -qiE '^passwordauthentication[[:space:]]+no'; then
+    # Assert ALL three settings actually took effect — another drop-in could
+    # override any of them (sshd is first-match-wins).
+    eff="$($SUDO sshd -T 2>/dev/null)"
+    if printf '%s\n' "$eff" | grep -qiE '^passwordauthentication[[:space:]]+no' \
+       && printf '%s\n' "$eff" | grep -qiE '^permitrootlogin[[:space:]]+prohibit-password' \
+       && printf '%s\n' "$eff" | grep -qiE '^kbdinteractiveauthentication[[:space:]]+no'; then
       ok "SSH hardened (password auth off; root reachable by key only)"
     else
-      warn "Wrote $HARDENING_CONF, but sshd still reports password auth ENABLED."
+      warn "Wrote $HARDENING_CONF, but sshd's effective config doesn't fully match:"
+      printf '%s\n' "$eff" \
+        | grep -iE '^(passwordauthentication|permitrootlogin|kbdinteractiveauthentication)[[:space:]]' \
+        | sed 's/^/      /'
       warn "Another drop-in is overriding it — check /etc/ssh/sshd_config.d/ (e.g. 50-cloud-init.conf)."
     fi
   else
