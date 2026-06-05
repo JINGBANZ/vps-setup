@@ -11,9 +11,13 @@
 #   modules/30-tailscale.sh    Tailscale                          (install.sh)
 #   modules/40-node-bun.sh     nvm + Node.js (LTS) + Bun
 #   modules/50-agents.sh       Claude Code + Codex CLI
+#   modules/60-firewall.sh     ufw (default-deny, SSH/mosh/tailscale allowed)
+#   modules/70-fail2ban.sh     fail2ban sshd jail
+#   modules/80-auto-updates.sh unattended-upgrades (auto security patches)
 #
 # Usage:
-#   ./setup.sh        # add sudo if you're not root
+#   ./setup.sh                 # add sudo if you're not root
+#   SSH_PORT=2222 ./setup.sh   # only if SSH runs on a non-standard port
 #
 set -euo pipefail
 
@@ -48,4 +52,7 @@ Manual auth steps, as needed:
   - gh:         gh auth login
   - claude:     claude     (sign in on first run)
   - codex:      codex      (sign in with ChatGPT)
+
+Baseline security applied: ufw firewall, fail2ban, and automatic security
+updates.
 EOF

@@ -11,7 +11,8 @@ coding agents without manually running a dozen install commands. The toolset:
 - **tmux** + **mosh** — keep long-running agent sessions alive across flaky/
   disconnected SSH connections, so a session survives a dropped link.
 - **Tailscale** — private, secure network access to the VPS from anywhere.
-- **ufw** — a firewall, installed here (configured in a later change).
+- **ufw** + **fail2ban** + **unattended-upgrades** — baseline security: firewall,
+  brute-force bans, and automatic security patches.
 - **git / curl / unzip** — the baseline plumbing everything else relies on.
 
 ## Quick start
@@ -37,6 +38,9 @@ modules/
   30-tailscale.sh     # Tailscale
   40-node-bun.sh      # nvm + Node.js (LTS) + Bun
   50-agents.sh        # Claude Code + Codex CLI
+  60-firewall.sh      # ufw (default-deny; SSH/mosh/tailscale allowed first)
+  70-fail2ban.sh      # fail2ban sshd jail
+  80-auto-updates.sh  # unattended-upgrades
 ```
 
 Modules run in order, so dependencies are guaranteed (e.g. `unzip` before Bun).
@@ -45,12 +49,25 @@ Adding a step is just dropping a numbered file into `modules/`.
 Everything the script prints is also appended to a logfile (`~/vps-setup.log` by
 default, override with `LOGFILE=...`), so a failed run can be inspected afterward.
 
+### Baseline security (automatic)
+
+These are pure-win and carry no lockout risk, so they always run:
+
+- **ufw firewall** — default-deny inbound. SSH, mosh, and the `tailscale0`
+  interface are allowed *before* the firewall is enabled, so it can't lock you
+  out. (Set `SSH_PORT` if SSH isn't on 22.)
+- **fail2ban** — bans an IP for 24h after 3 failed SSH logins in an hour,
+  blunting brute-force attacks.
+- **unattended-upgrades** — security patches install automatically via the daily
+  apt timer.
+
 ### It's safe to re-run (idempotent)
 
-Every module **checks whether the tool already exists and skips it if so**.
-Re-running on an already-set-up box installs nothing — it just prints
-`skipping` for each tool. You can re-run any time to fill in whatever's missing
-without risk of duplicate installs.
+Every module **checks whether the tool already exists and skips it if so**, and
+the security config files are simply rewritten to the same content. Re-running on
+an already-set-up box changes nothing — it just prints `skipping` for each tool.
+You can re-run any time to fill in whatever's missing without risk of duplicate
+installs.
 
 ## Tools installed
 
@@ -68,7 +85,7 @@ that workflow is listed alongside the official install method it uses.
 | tmux | Keeps long-running agent sessions alive after disconnects | `apt` — official on Debian/Ubuntu |
 | mosh | Resilient SSH for agent sessions over flaky links | `apt` — official on Debian/Ubuntu |
 | Tailscale | Private, secure remote access to the agent box | `curl -fsSL https://tailscale.com/install.sh \| sh` |
-| ufw | Firewall (installed here; configured in a later change) | `apt` — official on Debian/Ubuntu |
+| ufw | Firewall — configured default-deny and enabled (see Baseline security) | `apt` — official on Debian/Ubuntu |
 | git | Version control the agents operate on | `apt` — official on Debian/Ubuntu |
 | curl | Fetches the other installers; agent HTTP plumbing | `apt` — official on Debian/Ubuntu |
 | unzip | Required by Bun's installer; general unpacking | `apt` — official on Debian/Ubuntu |

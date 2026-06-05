@@ -37,3 +37,4 @@ require_apt() {
 
 # --- settings (sane defaults; override via env) ---------------------------
 NVM_VERSION="${NVM_VERSION:-v0.40.5}"   # pinned nvm release
+SSH_PORT="${SSH_PORT:-22}"               # firewall/fail2ban target port
