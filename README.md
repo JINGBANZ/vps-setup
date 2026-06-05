@@ -70,6 +70,12 @@ restarts no services (fail2ban is only restarted when its jail changed).
 Re-running on an already-set-up box changes nothing; you can re-run any time to
 fill in whatever's missing without risk of duplicate installs.
 
+The firewall is configured **only on first setup**: if `ufw` is already active,
+the module skips entirely, so any rules or default-policy changes you made by
+hand are preserved. The script-managed config *files* (fail2ban jail, SSH
+hardening drop-in, unattended-upgrades) are the script's to own — edit a separate
+drop-in instead of those if you want custom settings to survive a re-run.
+
 ## Tools installed
 
 Every tool here is tailored to the AI-assisted development workflow — its role in
