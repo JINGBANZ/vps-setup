@@ -115,7 +115,8 @@ password authentication so only SSH keys work. **Root is never locked out:**
 - Before turning passwords off, it makes sure **root has a key** (installing the
   resolved key if root has none). If no key can be obtained at all, it **leaves
   password authentication on** rather than risk a lockout.
-- The new `sshd` config is validated with `sshd -t` and reverted if invalid.
+- The drop-in is only (re)written when it differs, validated with `sshd -t`, and
+  reverted if invalid — so re-runs don't reload sshd unless something changed.
 
 ### Non-root admin user (prompted)
 

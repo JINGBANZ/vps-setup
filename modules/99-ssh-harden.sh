@@ -31,21 +31,25 @@ if ! $SUDO test -s /root/.ssh/authorized_keys 2>/dev/null && [ -z "$key" ]; then
   return 0 2>/dev/null || exit 0
 fi
 
-# Write a drop-in so we never clobber the distro's sshd_config.
+# Write a drop-in (never clobber the distro's sshd_config), but only when it
+# differs — so re-runs don't validate/reload sshd needlessly.
 $SUDO install -d -m 0755 /etc/ssh/sshd_config.d
-$SUDO tee /etc/ssh/sshd_config.d/99-hardening.conf >/dev/null <<'EOF'
+if write_config /etc/ssh/sshd_config.d/99-hardening.conf <<'EOF'
 # Managed by vps-setup/setup.sh — key-only SSH. Root stays reachable by key.
 PermitRootLogin prohibit-password
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 EOF
-
-# Validate before reloading; never reload a broken config.
-if $SUDO sshd -t; then
-  $SUDO systemctl reload ssh  >/dev/null 2>&1 \
-    || $SUDO systemctl reload sshd >/dev/null 2>&1 || true
-  ok "SSH hardened (password auth off; root reachable by key only)"
+then
+  # Config changed — validate before reloading; never reload a broken config.
+  if $SUDO sshd -t; then
+    $SUDO systemctl reload ssh  >/dev/null 2>&1 \
+      || $SUDO systemctl reload sshd >/dev/null 2>&1 || true
+    ok "SSH hardened (password auth off; root reachable by key only)"
+  else
+    warn "sshd config test failed — reverting hardening, leaving SSH unchanged."
+    $SUDO rm -f /etc/ssh/sshd_config.d/99-hardening.conf
+  fi
 else
-  warn "sshd config test failed — reverting hardening, leaving SSH unchanged."
-  $SUDO rm -f /etc/ssh/sshd_config.d/99-hardening.conf
+  skip "SSH hardening (already applied)"
 fi
