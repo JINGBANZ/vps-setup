@@ -121,6 +121,9 @@ password authentication so only SSH keys work. **Root is never locked out:**
   Ubuntu's `50-cloud-init.conf` (which may re-enable passwords). After reload the
   script runs `sshd -T` to confirm password auth is actually off, and warns if
   another drop-in still overrides it.
+- **On re-run the prompt is skipped** when SSH is already hardened (drop-in present
+  and `sshd -T` reports password auth off). If hardening was loosened since, the
+  prompt returns so you can re-apply it.
 
 ### Non-root admin user (prompted)
 
@@ -154,6 +157,10 @@ sudo -v                  # passwordless sudo works?
 
 The new `dev` user has passwordless sudo and key-only login. Root stays reachable
 by key the whole time, so nothing you do here can lock you out.
+
+**On re-run the prompt is skipped** once a managed admin user exists (detected via
+the `# Managed by vps-setup` marker in its `/etc/sudoers.d` file). To add a
+*second* admin user, create it by hand.
 
 ### It's safe to re-run (idempotent)
 

@@ -9,6 +9,14 @@
 # Runs before SSH hardening (99) so the user exists before login rules change.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
+# If a previous run already created a managed admin user (our sudoers marker is
+# present), skip the prompt entirely so re-runs stay quiet. To add ANOTHER admin
+# user, run the relevant commands by hand.
+if $SUDO grep -rqs 'Managed by vps-setup' /etc/sudoers.d/ 2>/dev/null; then
+  skip "admin user (already configured)"
+  return 0 2>/dev/null || exit 0
+fi
+
 if ! ask_yes_no "Create a non-root admin user (passwordless sudo)?" "n"; then
   skip "admin user (declined)"
   return 0 2>/dev/null || exit 0
@@ -47,7 +55,8 @@ $SUDO usermod -aG sudo "$admin_user"
 # Passwordless sudo — validate with `visudo -cf` BEFORE installing, because a
 # malformed file in /etc/sudoers.d breaks sudo system-wide.
 sudoers_tmp="$(mktemp)"
-printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$admin_user" > "$sudoers_tmp"
+# The marker comment is also our "already configured" sentinel on re-run.
+printf '# Managed by vps-setup/setup.sh\n%s ALL=(ALL) NOPASSWD:ALL\n' "$admin_user" > "$sudoers_tmp"
 if $SUDO visudo -cf "$sudoers_tmp" >/dev/null 2>&1; then
   $SUDO install -m 0440 -o root -g root "$sudoers_tmp" "/etc/sudoers.d/90-$admin_user"
   ok "'$admin_user' created with passwordless sudo"

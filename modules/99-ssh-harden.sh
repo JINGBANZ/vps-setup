@@ -19,6 +19,15 @@ HARDENING_CONF=/etc/ssh/sshd_config.d/00-hardening.conf
 # True if root has at least one *valid* key (not a comment/blank/options-only line).
 root_has_key() { [ -n "$(extract_keys /root/.ssh/authorized_keys)" ]; }
 
+# If SSH is already hardened by us (our drop-in is present AND sshd confirms
+# password auth is off), skip the prompt so re-runs stay quiet. If it's been
+# loosened since, sshd -T reports 'yes', detection fails, and we re-prompt.
+if $SUDO test -f "$HARDENING_CONF" \
+   && $SUDO sshd -T 2>/dev/null | grep -qiE '^passwordauthentication[[:space:]]+no'; then
+  skip "SSH hardening (already applied)"
+  return 0 2>/dev/null || exit 0
+fi
+
 if ! ask_yes_no "Harden SSH to key-only login (disable password auth)?" "y"; then
   skip "SSH hardening (declined) — password login left enabled"
   return 0 2>/dev/null || exit 0
