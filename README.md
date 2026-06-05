@@ -1,6 +1,6 @@
 # VPS Setup
 
-`setup.sh` provisions my standard toolset on a fresh **Debian/Ubuntu** VPS in one
+`setup.sh` provisions a standard toolset on a fresh **Debian/Ubuntu** VPS in one
 command. It exists so a brand-new VPS can be brought to a ready-to-work state
 without manually remembering and running a dozen different install commands.
 
