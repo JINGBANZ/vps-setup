@@ -1,11 +1,8 @@
 # VPS Setup
 
-`setup.sh` provisions a standard toolset on a fresh **Debian/Ubuntu** VPS in one
-command. It exists so a brand-new VPS can be brought to a ready-to-work state
-without manually remembering and running a dozen different install commands.
-
-**This script is built for an AI-assisted development workflow.** The toolset is
-chosen to get a fresh box ready to run AI coding agents on a remote VPS:
+`setup.sh` provisions a fresh **Debian/Ubuntu** VPS for an **AI-assisted
+development workflow** in one command — getting a brand-new box ready to run AI
+coding agents without manually running a dozen install commands. The toolset:
 
 - **Claude Code** and **Codex CLI** — the AI coding agents themselves.
 - **Node.js (via nvm)** and **Bun** — the JavaScript/TypeScript runtimes these

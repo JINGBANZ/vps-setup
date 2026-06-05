@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# setup.sh — Set up my standard toolset on a fresh Linux (Debian/Ubuntu) VPS.
+# setup.sh — Set up a standard toolset on a fresh Linux (Debian/Ubuntu) VPS.
 #
 # Tools (and the OFFICIAL install method each follows):
 #   git, curl, unzip, tmux, mosh, ufw  -> apt          (official on Debian/Ubuntu)
