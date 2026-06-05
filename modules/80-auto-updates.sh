@@ -18,4 +18,9 @@ then
 else
   skip "unattended-upgrades (already configured)"
 fi
-$SUDO systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
+
+# The daily apt timers are what actually run the upgrades (gated by the periodic
+# values written above). They're enabled by default on Ubuntu; assert them here.
+# NOTE: do NOT use `systemctl enable --now unattended-upgrades` — that unit only
+# applies pending upgrades at *shutdown*, it does not drive the daily run.
+$SUDO systemctl enable --now apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true

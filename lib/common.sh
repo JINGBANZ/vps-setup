@@ -39,17 +39,15 @@ require_apt() {
 # Converges the file to that content, but only WRITES when it actually differs.
 # Returns 0 if it changed the file, 1 if it was already up to date — so callers
 # can reload/restart services only on a real change (no needless churn on re-run).
+# For NON-SECRET config only: the content briefly lives in a user-owned temp file.
 write_config() {
   local path="$1" mode="${2:-0644}" tmp
   tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN   # clean up even if interrupted mid-run
   cat > "$tmp"
-  if $SUDO cmp -s "$tmp" "$path" 2>/dev/null; then
-    rm -f "$tmp"
-    return 1   # already up to date
-  fi
+  $SUDO cmp -s "$tmp" "$path" 2>/dev/null && return 1   # already up to date
   $SUDO install -D -m "$mode" "$tmp" "$path"
-  rm -f "$tmp"
-  return 0     # changed
+  return 0                                              # changed
 }
 
 # --- settings (sane defaults; override via env) ---------------------------

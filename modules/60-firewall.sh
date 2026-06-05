@@ -3,6 +3,13 @@
 # FIRST so enabling the firewall can never lock us out.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
+# ufw is normally installed by 10-apt-tools.sh; install it here too so this
+# module is self-contained and doesn't silently no-op if ufw is missing.
+if ! have ufw; then
+  log "Installing ufw"
+  $SUDO apt-get install -y ufw >/dev/null
+fi
+
 log "Configuring ufw firewall"
 $SUDO ufw allow "${SSH_PORT}/tcp"    >/dev/null            # SSH — open before enabling
 $SUDO ufw allow 60000:61000/udp      >/dev/null            # mosh
