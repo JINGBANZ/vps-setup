@@ -19,10 +19,12 @@ fi
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
 # --- Node.js LTS (official nvm recipe) ------------------------------------
-if have nvm && nvm which current >/dev/null 2>&1; then
+# Sourcing nvm.sh doesn't auto-select a version, so activate the default first.
+# Then a re-run reliably detects an existing install and skips (instead of
+# redundantly re-running `nvm install`). No-op/harmless if no default is set yet.
+nvm use default >/dev/null 2>&1 || true
+if have node; then
   skip "Node.js ($(node --version 2>/dev/null))"
-elif have node; then
-  skip "Node.js ($(node --version)) — found outside nvm"
 else
   log "Installing Node.js LTS via nvm"
   nvm install --latest-npm 'lts/*'
