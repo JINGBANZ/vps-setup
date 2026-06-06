@@ -59,7 +59,9 @@ if $SUDO grep -qiE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.
       warn "sshd -t rejected the hardening drop-in; reverted, sshd untouched"
     fi
   else
+    # Unchanged on re-run: nothing to validate or reload — done.
     skip "SSH hardening (drop-in already in place)"
+    return 0 2>/dev/null || exit 0
   fi
 else
   # Older sshd with no Include: edit the main file in place. Converge each
