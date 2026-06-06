@@ -34,6 +34,7 @@ lib/
   common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
 modules/
   10-apt-tools.sh     # git, curl, unzip, tmux, mosh, ufw
+  15-ssh-hardening.sh # key-only SSH (guarded: skips if no key is present)
   20-gh.sh            # GitHub CLI (signed apt repo)
   30-tailscale.sh     # Tailscale
   40-node-bun.sh      # nvm + Node.js (LTS) + Bun
@@ -57,7 +58,12 @@ These are pure-win and carry no lockout risk, so they always run:
   interface are allowed *before* the firewall is enabled, so it can't lock you
   out. (Set `SSH_PORT` if SSH isn't on 22.)
 - **fail2ban** — bans an IP for 24h after 3 failed SSH logins in an hour,
-  blunting brute-force attacks.
+  blunting brute-force attacks. (Uses the `systemd` journal backend, so it pulls
+  in `python3-systemd` — without which the jail silently fails to start.)
+- **SSH hardening** — disables password and root-password logins (key auth keeps
+  working). **Guarded:** it only flips this on if an authorized SSH key already
+  exists for your user or root; on a password-only box it skips and warns rather
+  than risk locking you out.
 - **unattended-upgrades** — security patches install automatically via the daily
   apt timer.
 

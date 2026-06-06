@@ -2,9 +2,17 @@
 # 70-fail2ban.sh — ban IPs after repeated failed SSH logins.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
-if ! have fail2ban-client; then
-  log "Installing fail2ban"
-  $SUDO apt-get install -y fail2ban >/dev/null
+# `backend = systemd` (below) reads bans from the journal, which requires the
+# python3-systemd bindings. fail2ban only *Suggests* that package, so on a fresh
+# box it's missing and the sshd jail fails to start ("No module named 'systemd'")
+# — silently leaving SSH unprotected. Install both together so the jail works.
+F2B_PKGS=(fail2ban python3-systemd)
+f2b_missing=()
+have fail2ban-client || f2b_missing+=(fail2ban)
+dpkg -s python3-systemd >/dev/null 2>&1 || f2b_missing+=(python3-systemd)
+if [ "${#f2b_missing[@]}" -gt 0 ]; then
+  log "Installing: ${f2b_missing[*]}"
+  $SUDO apt-get install -y "${f2b_missing[@]}" >/dev/null
 fi
 $SUDO systemctl enable --now fail2ban >/dev/null 2>&1 || true
 

@@ -7,6 +7,7 @@
 # idempotent (checks-then-installs), so the whole script is safe to re-run.
 #
 #   modules/10-apt-tools.sh    git, curl, unzip, tmux, mosh, ufw   (apt)
+#   modules/15-ssh-hardening.sh key-only SSH (guarded: skips if no key present)
 #   modules/20-gh.sh           GitHub CLI                          (apt repo)
 #   modules/30-tailscale.sh    Tailscale                          (install.sh)
 #   modules/40-node-bun.sh     nvm + Node.js (LTS) + Bun
