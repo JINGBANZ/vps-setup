@@ -6,7 +6,6 @@
 # python3-systemd bindings. fail2ban only *Suggests* that package, so on a fresh
 # box it's missing and the sshd jail fails to start ("No module named 'systemd'")
 # — silently leaving SSH unprotected. Install both together so the jail works.
-F2B_PKGS=(fail2ban python3-systemd)
 f2b_missing=()
 have fail2ban-client || f2b_missing+=(fail2ban)
 dpkg -s python3-systemd >/dev/null 2>&1 || f2b_missing+=(python3-systemd)

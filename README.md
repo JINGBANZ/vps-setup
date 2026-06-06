@@ -62,8 +62,8 @@ These are pure-win and carry no lockout risk, so they always run:
   in `python3-systemd` — without which the jail silently fails to start.)
 - **SSH hardening** — disables password and root-password logins (key auth keeps
   working). **Guarded:** it only flips this on if an authorized SSH key already
-  exists for your user or root; on a password-only box it skips and warns rather
-  than risk locking you out.
+  exists for the account you log in as; on a password-only box it skips and warns
+  rather than risk locking you out.
 - **unattended-upgrades** — security patches install automatically via the daily
   apt timer.
 

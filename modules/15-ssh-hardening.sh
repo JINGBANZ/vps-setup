@@ -2,24 +2,24 @@
 # 15-ssh-hardening.sh — disable SSH password logins (key-only), keeping key
 # auth fully working. Bots brute-forcing port 22 with passwords get nothing.
 #
-# SAFETY GUARD: we only disable password auth if an authorized SSH key already
-# exists for the login user or root. On a password-only box (no key installed)
+# SAFETY GUARD: we only disable password auth if an authorized SSH key exists
+# for the account you actually log in as ($TARGET_USER). On a password-only box
 # we SKIP and warn — turning passwords off there would lock you out for good.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
-# True if any common authorized_keys file holds a real public key line.
+# True only if the LOGIN user ($TARGET_USER) has a usable public key. We check
+# that account specifically — not root's — because disabling passwords locks you
+# out precisely when YOUR account has no key. (When you run this as root,
+# TARGET_HOME is /root, so root is covered.) Assumes the default
+# AuthorizedKeysFile location (~/.ssh/authorized_keys).
 authkey_present() {
-  local f
-  for f in "$TARGET_HOME/.ssh/authorized_keys" /root/.ssh/authorized_keys; do
-    $SUDO test -s "$f" 2>/dev/null || continue
-    $SUDO grep -qiE '(ssh-(ed25519|rsa|dss)|ecdsa-sha2-|sk-(ssh|ecdsa))' "$f" 2>/dev/null \
-      && return 0
-  done
-  return 1
+  local f="$TARGET_HOME/.ssh/authorized_keys"
+  $SUDO test -s "$f" 2>/dev/null \
+    && $SUDO grep -qiE '(ssh-(ed25519|rsa|dss)|ecdsa-sha2-|sk-(ssh|ecdsa))' "$f" 2>/dev/null
 }
 
 if ! authkey_present; then
-  warn "No authorized SSH key found for $TARGET_USER or root."
+  warn "No authorized SSH key for $TARGET_USER (~/.ssh/authorized_keys)."
   skip "SSH hardening (would lock you out without a key — add one, then re-run)"
   return 0 2>/dev/null || exit 0
 fi
@@ -42,7 +42,8 @@ EOF
 # 00- so it sorts before 50-cloud-init.conf: sshd uses the FIRST value it reads
 # for each keyword, so our file must win over cloud-init's PasswordAuthentication.
 DROPIN=/etc/ssh/sshd_config.d/00-vps-hardening.conf
-applied=0
+applied=0     # 1 once a real change is staged and validated
+reverted=0    # 1 if we wrote a change but sshd -t rejected it (so we backed out)
 
 if $SUDO grep -qiE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' \
      /etc/ssh/sshd_config 2>/dev/null; then
@@ -54,29 +55,48 @@ if $SUDO grep -qiE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.
       applied=1
     else
       $SUDO rm -f "$DROPIN"
+      reverted=1
       warn "sshd -t rejected the hardening drop-in; reverted, sshd untouched"
     fi
   else
     skip "SSH hardening (drop-in already in place)"
   fi
 else
-  # Older sshd with no Include: edit the main file in place. Only touch lines
-  # that aren't already at the target value, so re-runs don't churn.
+  # Older sshd with no Include: edit the main file in place. Converge each
+  # directive to its target value, ADDING it if the keyword is absent entirely
+  # (a plain sed only rewrites existing lines and would silently skip a missing
+  # directive — the worst failure mode for a hardening script). Idempotent: the
+  # exact-line check short-circuits with no change on re-run.
   cfg=/etc/ssh/sshd_config
-  $SUDO grep -q '^PasswordAuthentication no'        "$cfg" || { $SUDO sed -i 's/^#*[[:space:]]*PasswordAuthentication.*/PasswordAuthentication no/'        "$cfg"; applied=1; }
-  $SUDO grep -q '^KbdInteractiveAuthentication no'  "$cfg" || { $SUDO sed -i 's/^#*[[:space:]]*KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' "$cfg"; applied=1; }
-  $SUDO grep -q '^PermitRootLogin prohibit-password' "$cfg" || { $SUDO sed -i 's/^#*[[:space:]]*PermitRootLogin.*/PermitRootLogin prohibit-password/'           "$cfg"; applied=1; }
+  ensure_directive() {   # $1 = keyword, $2 = full desired line
+    $SUDO grep -qx "$2" "$cfg" && return 0           # already exactly right
+    if $SUDO grep -qE "^#*[[:space:]]*$1([[:space:]]|\$)" "$cfg"; then
+      $SUDO sed -i "s|^#*[[:space:]]*$1.*|$2|" "$cfg" # rewrite existing/commented
+    else
+      printf '%s\n' "$2" | $SUDO tee -a "$cfg" >/dev/null   # keyword absent: append
+    fi
+    applied=1
+  }
+  ensure_directive PasswordAuthentication      'PasswordAuthentication no'
+  ensure_directive KbdInteractiveAuthentication 'KbdInteractiveAuthentication no'
+  ensure_directive PermitRootLogin              'PermitRootLogin prohibit-password'
   if [ "$applied" -eq 1 ]; then
     log "Hardening sshd (edited $cfg)"
-    $SUDO "$SSHD_BIN" -t 2>/dev/null || { warn "sshd -t failed after edit — NOT reloading; review $cfg"; applied=0; }
+    $SUDO "$SSHD_BIN" -t 2>/dev/null \
+      || { warn "sshd -t failed after edit — NOT reloading; review $cfg"; applied=0; reverted=1; }
   fi
 fi
 
 if [ "$applied" -eq 1 ]; then
-  # reload (not restart) is enough for auth-policy changes and won't drop your
-  # current session. Unit is `ssh` on Debian/Ubuntu (not `sshd`).
+  # reload (not restart) is enough for AUTH-policy changes (the only thing we
+  # touch) and won't drop your current session. This holds even under Ubuntu's
+  # ssh.socket activation, since per-connection sshd re-reads config on each new
+  # login; a Port/ListenAddress change would NOT be picked up this way, but we
+  # change neither. Unit is `ssh` on Debian/Ubuntu (not `sshd`).
   $SUDO systemctl reload ssh >/dev/null 2>&1 || $SUDO systemctl reload sshd >/dev/null 2>&1 || true
   ok "SSH hardened (key-only login; password & root-password logins disabled)"
+elif [ "$reverted" -eq 1 ]; then
+  warn "SSH hardening NOT applied — config test failed; password login still enabled"
 else
   skip "SSH hardening (already key-only)"
 fi
