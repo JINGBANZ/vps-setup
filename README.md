@@ -17,6 +17,37 @@ coding agents without manually running a dozen install commands. The toolset:
 
 ## Quick start
 
+### Remote install (one command)
+
+No clone needed — pipe the bootstrap into a shell. It downloads the repo to a
+temp dir and runs `setup.sh`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh | sudo bash
+source ~/.bashrc  # pick up new PATH (nvm, bun, claude, codex)
+```
+
+Run this as a **non-root user with `sudo`** (not as root directly): user-level
+tools — nvm, Bun, claude, codex — install for the invoking user (`$SUDO_USER`),
+so `source ~/.bashrc` should be run as that same user. Piping straight to `bash`
+as root instead would put those installs in root's home.
+
+To pass env vars, set them **after** `sudo` (sudo scrubs the environment, so
+`SSH_PORT=2222 … | sudo bash` would not reach the script):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh | sudo SSH_PORT=2222 bash
+```
+
+`bootstrap.sh` is a tiny loader (the same pattern the Claude/rustup installers
+use): its whole body is wrapped in a function called on the last line, so a
+dropped connection mid-download leaves a partial file that does nothing rather
+than running a truncated script. Prefer `curl`, falls back to `wget`, then
+`git`. It tracks `main`; override the source with `VPS_SETUP_REPO` /
+`VPS_SETUP_REF`.
+
+### Clone and run
+
 ```bash
 git clone https://github.com/JINGBANZ/vps-setup.git && cd vps-setup
 ./setup.sh        # add sudo if you're not root
@@ -29,6 +60,7 @@ The script is modular: a thin orchestrator sources shared helpers, then runs eac
 module in `modules/` in filename order. To change one concern, edit one file.
 
 ```
+bootstrap.sh          # one-command remote installer: downloads the repo, runs setup.sh
 setup.sh              # orchestrator: sources lib, loops over modules/, logs output
 lib/
   common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
