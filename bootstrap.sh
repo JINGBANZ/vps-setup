@@ -30,16 +30,22 @@ main() {
   trap 'rm -rf "$tmp"' EXIT
 
   echo "==> Fetching $REPO@$REF"
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "https://github.com/$REPO/archive/refs/heads/$REF.tar.gz" \
-      | tar -xz -C "$tmp" --strip-components=1
-  elif command -v wget >/dev/null 2>&1; then
-    wget -qO- "https://github.com/$REPO/archive/refs/heads/$REF.tar.gz" \
-      | tar -xz -C "$tmp" --strip-components=1
+  local tarball="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"
+  # Tarball downloads need tar; fall back to git when it's missing rather than
+  # piping into a nonexistent tar.
+  if command -v tar >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$tarball" | tar -xz -C "$tmp" --strip-components=1
+  elif command -v tar >/dev/null 2>&1 && command -v wget >/dev/null 2>&1; then
+    wget -qO- "$tarball" | tar -xz -C "$tmp" --strip-components=1
   elif command -v git >/dev/null 2>&1; then
     git clone --depth 1 --branch "$REF" "https://github.com/$REPO.git" "$tmp"
   else
-    echo "Need one of curl, wget, or git to download $REPO." >&2
+    echo "Need git, or tar plus one of curl/wget, to download $REPO." >&2
+    exit 1
+  fi
+
+  if [ ! -f "$tmp/setup.sh" ]; then
+    echo "setup.sh not found in $REPO@$REF — wrong ref or unexpected layout?" >&2
     exit 1
   fi
 

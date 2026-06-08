@@ -27,6 +27,11 @@ curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.s
 source ~/.bashrc  # pick up new PATH (nvm, bun, claude, codex)
 ```
 
+Run this as a **non-root user with `sudo`** (not as root directly): user-level
+tools — nvm, Bun, claude, codex — install for the invoking user (`$SUDO_USER`),
+so `source ~/.bashrc` should be run as that same user. Piping straight to `bash`
+as root instead would put those installs in root's home.
+
 To pass env vars, set them **after** `sudo` (sudo scrubs the environment, so
 `SSH_PORT=2222 … | sudo bash` would not reach the script):
 
