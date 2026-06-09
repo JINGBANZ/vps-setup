@@ -16,7 +16,7 @@
 #   modules/25-fail2ban.sh      fail2ban sshd jail
 #   modules/30-auto-updates.sh  unattended-upgrades (auto security patches)
 #   modules/40-gh.sh            GitHub CLI                          (apt repo)
-#   modules/50-tailscale.sh     Tailscale                          (install.sh)
+#   modules/50-tailscale.sh     Tailscale                           (install.sh)
 #   modules/60-node-bun.sh      nvm + Node.js (LTS) + Bun
 #   modules/70-agents.sh        Claude Code + Codex CLI
 #
