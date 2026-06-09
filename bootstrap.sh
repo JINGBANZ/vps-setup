@@ -30,7 +30,9 @@ REF="${VPS_SETUP_REF:-main}"
 # failure that masks a download error.) Initialized empty; the trap no-ops
 # until it's set.
 tmp=""
-cleanup() { [ -n "$tmp" ] && rm -rf "$tmp"; }
+# `return 0` so this trap never clobbers the script's real exit code (the test
+# is falsy while tmp is still empty, and a trap's last status becomes $?).
+cleanup() { [ -n "$tmp" ] && rm -rf "$tmp"; return 0; }
 trap cleanup EXIT
 
 main() {
