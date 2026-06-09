@@ -66,13 +66,16 @@ require_apt() {
 # MUST be used in a conditional (`if write_config ...; then`) — the "unchanged"
 # return of 1 would otherwise abort the script under `set -e`.
 write_config() {
-  local path="$1" mode="${2:-0644}" tmp
+  local path="$1" mode="${2:-0644}" tmp rc=0
   tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN   # clean up even if interrupted mid-run
   cat > "$tmp"
-  $SUDO cmp -s "$tmp" "$path" 2>/dev/null && return 1   # already up to date
-  $SUDO install -D -m "$mode" "$tmp" "$path"
-  return 0                                              # changed
+  if $SUDO cmp -s "$tmp" "$path" 2>/dev/null; then
+    rc=1                                   # already up to date
+  else
+    $SUDO install -D -m "$mode" "$tmp" "$path"   # rc stays 0: changed
+  fi
+  rm -f "$tmp"
+  return "$rc"
 }
 
 # --- settings (sane defaults; override via env) ---------------------------
