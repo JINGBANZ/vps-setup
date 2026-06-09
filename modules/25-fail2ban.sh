@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 70-fail2ban.sh — ban IPs after repeated failed SSH logins.
+# 25-fail2ban.sh — ban IPs after repeated failed SSH logins.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
 # `backend = systemd` (below) reads bans from the journal, which requires the

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 40-node-bun.sh — JS/TS runtimes: nvm + Node.js (LTS), and Bun.
+# 60-node-bun.sh — JS/TS runtimes: nvm + Node.js (LTS), and Bun.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
 # --- nvm (official versioned installer) -----------------------------------
@@ -37,6 +37,10 @@ if have bun || [ -x "$HOME/.bun/bin/bun" ]; then
   skip "bun"
 else
   log "Installing Bun"
-  curl -fsSL https://bun.com/install | bash
-  ok "bun installed"
+  # Optional tool: a transient download failure shouldn't abort the whole run.
+  if curl -fsSL https://bun.com/install | bash; then
+    ok "bun installed"
+  else
+    warn "Bun install failed (transient network/CDN?) — skipping; re-run later"
+  fi
 fi

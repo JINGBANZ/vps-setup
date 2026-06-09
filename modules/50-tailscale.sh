@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 30-tailscale.sh — Tailscale via the official install script.
+# 50-tailscale.sh — Tailscale via the official install script.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
 if have tailscale; then

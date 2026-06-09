@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 80-auto-updates.sh — automatic security patches via unattended-upgrades.
+# 30-auto-updates.sh — automatic security patches via unattended-upgrades.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
 if ! dpkg -s unattended-upgrades >/dev/null 2>&1; then

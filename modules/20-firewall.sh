@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 60-firewall.sh — ufw: default-deny inbound, but allow SSH/mosh/Tailscale
+# 20-firewall.sh — ufw: default-deny inbound, but allow SSH/mosh/Tailscale
 # FIRST so enabling the firewall can never lock us out.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 

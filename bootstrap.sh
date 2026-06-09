@@ -24,10 +24,19 @@ set -euo pipefail
 REPO="${VPS_SETUP_REPO:-JINGBANZ/vps-setup}"
 REF="${VPS_SETUP_REF:-main}"
 
+# Temp dir is a GLOBAL so the EXIT trap can clean it up. (A `local` in main()
+# is out of scope by the time the EXIT trap fires, and referencing it there
+# crashes with "tmp: unbound variable" under `set -u` — which is exactly the
+# failure that masks a download error.) Initialized empty; the trap no-ops
+# until it's set.
+tmp=""
+# `return 0` so this trap never clobbers the script's real exit code (the test
+# is falsy while tmp is still empty, and a trap's last status becomes $?).
+cleanup() { [ -n "$tmp" ] && rm -rf "$tmp"; return 0; }
+trap cleanup EXIT
+
 main() {
-  local tmp
   tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
 
   echo "==> Fetching $REPO@$REF"
   local tarball="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"

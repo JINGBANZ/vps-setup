@@ -6,15 +6,19 @@
 # module in modules/ in filename order. Each module is self-contained and
 # idempotent (checks-then-installs), so the whole script is safe to re-run.
 #
-#   modules/10-apt-tools.sh    git, curl, unzip, tmux, mosh, ufw   (apt)
+# Security modules run FIRST, before the network-heavy third-party installers
+# (gh/tailscale/node/agents): a transient CDN failure in an optional tool must
+# never leave the box without a firewall, fail2ban, or auto-updates.
+#
+#   modules/10-apt-tools.sh     git, curl, unzip, tmux, mosh, ufw   (apt)
 #   modules/15-ssh-hardening.sh key-only SSH (guarded: skips if no key present)
-#   modules/20-gh.sh           GitHub CLI                          (apt repo)
-#   modules/30-tailscale.sh    Tailscale                          (install.sh)
-#   modules/40-node-bun.sh     nvm + Node.js (LTS) + Bun
-#   modules/50-agents.sh       Claude Code + Codex CLI
-#   modules/60-firewall.sh     ufw (default-deny, SSH/mosh/tailscale allowed)
-#   modules/70-fail2ban.sh     fail2ban sshd jail
-#   modules/80-auto-updates.sh unattended-upgrades (auto security patches)
+#   modules/20-firewall.sh      ufw (default-deny, SSH/mosh/tailscale allowed)
+#   modules/25-fail2ban.sh      fail2ban sshd jail
+#   modules/30-auto-updates.sh  unattended-upgrades (auto security patches)
+#   modules/40-gh.sh            GitHub CLI                          (apt repo)
+#   modules/50-tailscale.sh     Tailscale                           (install.sh)
+#   modules/60-node-bun.sh      nvm + Node.js (LTS) + Bun
+#   modules/70-agents.sh        Claude Code + Codex CLI
 #
 # Usage:
 #   ./setup.sh                 # add sudo if you're not root
