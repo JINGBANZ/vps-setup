@@ -67,14 +67,19 @@ lib/
 modules/
   10-apt-tools.sh     # git, curl, unzip, tmux, mosh, ufw
   15-ssh-hardening.sh # key-only SSH (guarded: skips if no key is present)
-  20-gh.sh            # GitHub CLI (signed apt repo)
-  30-tailscale.sh     # Tailscale
-  40-node-bun.sh      # nvm + Node.js (LTS) + Bun
-  50-agents.sh        # Claude Code + Codex CLI
-  60-firewall.sh      # ufw (default-deny; SSH/mosh/tailscale allowed first)
-  70-fail2ban.sh      # fail2ban sshd jail
-  80-auto-updates.sh  # unattended-upgrades
+  20-firewall.sh      # ufw (default-deny; SSH/mosh/tailscale allowed first)
+  25-fail2ban.sh      # fail2ban sshd jail
+  30-auto-updates.sh  # unattended-upgrades
+  40-gh.sh            # GitHub CLI (signed apt repo)
+  50-tailscale.sh     # Tailscale
+  60-node-bun.sh      # nvm + Node.js (LTS) + Bun
+  70-agents.sh        # Claude Code + Codex CLI
 ```
+
+Security (firewall/fail2ban/auto-updates) runs *before* the network-heavy
+third-party installers, so a transient CDN failure can't leave the box
+unhardened; the optional tool installers (Claude, Codex, Bun) soft-fail with a
+warning rather than aborting the run.
 
 Modules run in order, so dependencies are guaranteed (e.g. `unzip` before Bun).
 Adding a step is just dropping a numbered file into `modules/`.

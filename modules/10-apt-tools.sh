@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 10-apt-tools.sh — base CLI tools via apt: git, curl, unzip, tmux, mosh, ufw.
-# (unzip must exist before Bun is installed in 40-node-bun.sh.)
+# (unzip must exist before Bun is installed in 60-node-bun.sh.)
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
 APT_PKGS=(git curl unzip tmux mosh ufw)
