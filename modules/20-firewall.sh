@@ -7,7 +7,7 @@
 # module is self-contained and doesn't silently no-op if ufw is missing.
 if ! have ufw; then
   log "Installing ufw"
-  $SUDO apt-get install -y ufw >/dev/null
+  apt_get install -y ufw >/dev/null
 fi
 
 # If ufw is already active, leave the existing firewall completely untouched —

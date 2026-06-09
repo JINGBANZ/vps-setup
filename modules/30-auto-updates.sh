@@ -4,7 +4,7 @@
 
 if ! dpkg -s unattended-upgrades >/dev/null 2>&1; then
   log "Installing unattended-upgrades"
-  $SUDO apt-get install -y unattended-upgrades >/dev/null
+  apt_get install -y unattended-upgrades >/dev/null
 fi
 
 # Enable the daily apt timers that drive unattended security upgrades.

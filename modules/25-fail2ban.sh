@@ -11,7 +11,7 @@ have fail2ban-client || f2b_missing+=(fail2ban)
 dpkg -s python3-systemd >/dev/null 2>&1 || f2b_missing+=(python3-systemd)
 if [ "${#f2b_missing[@]}" -gt 0 ]; then
   log "Installing: ${f2b_missing[*]}"
-  $SUDO apt-get install -y "${f2b_missing[@]}" >/dev/null
+  apt_get install -y "${f2b_missing[@]}" >/dev/null
 fi
 $SUDO systemctl enable --now fail2ban >/dev/null 2>&1 || true
 

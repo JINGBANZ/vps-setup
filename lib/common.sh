@@ -27,6 +27,28 @@ TARGET_USER="${SUDO_USER:-$(id -un)}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 [ -n "$TARGET_HOME" ] || TARGET_HOME="$HOME"
 
+# --- non-interactive apt --------------------------------------------------
+# Without these, the first real `apt-get install` on a fresh box hangs: debconf
+# and needrestart try to open interactive dialogs, but under `curl … | sudo bash`
+# stdin is the pipe, not a TTY, so the prompt waits forever with nothing able to
+# answer it. Force every apt/dpkg/needrestart invocation fully non-interactive.
+#   DEBIAN_FRONTEND=noninteractive  — debconf never prompts, uses defaults
+#   NEEDRESTART_MODE=a              — needrestart auto-restarts the affected
+#                                     services instead of showing its TUI menu,
+#                                     so upgraded libraries actually take effect
+#                                     (vs. NEEDRESTART_SUSPEND, which would skip
+#                                     the check entirely and leave them stale).
+# Exported so they reach apt run directly (root, SUDO="") and, via the `env`
+# prefix below, apt run through sudo (which otherwise scrubs the environment).
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
+# apt_get — wrapper that runs apt-get with the non-interactive env preserved
+# across the sudo boundary. Modules should call this instead of `$SUDO apt-get`.
+apt_get() {
+  $SUDO env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get "$@"
+}
+
 # Bail early on non-apt systems.
 require_apt() {
   if ! have apt-get; then
