@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 20-gh.sh — GitHub CLI from the official cli.github.com signed apt repo.
+# 40-gh.sh — GitHub CLI from the official cli.github.com signed apt repo.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
 if have gh; then
