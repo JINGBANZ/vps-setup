@@ -61,6 +61,7 @@ require_apt() {
 # Converges the file to that content, but only WRITES when it actually differs.
 # Returns 0 if it changed the file, 1 if it was already up to date — so callers
 # can reload/restart services only on a real change (no needless churn on re-run).
+# A failed write aborts the whole script (see below), so the return is binary.
 # For NON-SECRET config only: the content briefly lives in a user-owned temp file.
 #
 # MUST be used in a conditional (`if write_config ...; then`) — the "unchanged"
@@ -71,9 +72,17 @@ write_config() {
   cat > "$tmp"
   if $SUDO cmp -s "$tmp" "$path" 2>/dev/null; then
     rc=1                                   # already up to date
-  else
-    $SUDO install -D -m "$mode" "$tmp" "$path"   # rc stays 0: changed
-  fi
+  elif ! $SUDO install -D -m "$mode" "$tmp" "$path"; then
+    # Callers invoke us as an `if` condition, which suppresses `set -e` for the
+    # whole body — so a failed install would otherwise be swallowed and reported
+    # as a successful "changed" (rc=0), churning service reloads on a file that
+    # was never written. Returning non-zero is no better: callers read that as
+    # "unchanged" and silently skip. Abort hard instead — `exit` fires even from
+    # inside an `if` condition, where `return` would not.
+    rm -f "$tmp"
+    warn "write_config: failed to write $path"
+    exit 1
+  fi                                       # install ok here -> rc stays 0: changed
   rm -f "$tmp"
   return "$rc"
 }
