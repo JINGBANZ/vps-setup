@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Syntax check (bash -n)
+        run: |
+          for f in bootstrap.sh setup.sh lib/*.sh modules/*.sh tests/*.sh; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+      - name: ShellCheck
+        # -S warning: fail on real problems, ignore info/style nits so CI tracks
+        # correctness, not formatting. -x follows `source`d files.
+        run: shellcheck -x -S warning bootstrap.sh setup.sh lib/*.sh modules/*.sh tests/*.sh
+
+  # Regression guard for the fresh-box install hang: debconf/needrestart trying
+  # to prompt with no TTY (the `curl | sudo bash` path). Runs on the two Ubuntu
+  # LTS releases that ship needrestart by default.
+  noninteractive-apt:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:22.04', 'ubuntu:24.04']
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Install test prerequisites
+        # Minimal Ubuntu images lack git (needed by checkout) and CA certs.
+        run: |
+          apt-get update
+          apt-get install -y git ca-certificates
+      - uses: actions/checkout@v4
+      - name: apt_get wrapper sets non-interactive env (mechanism)
+        run: bash tests/test-apt-env.sh
+      - name: Fresh-box install does not hang (end-to-end)
+        run: bash tests/test-fresh-install.sh

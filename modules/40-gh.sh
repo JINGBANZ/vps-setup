@@ -13,7 +13,7 @@ else
   $SUDO mkdir -p -m 755 /etc/apt/sources.list.d
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
     | $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-  $SUDO apt-get update -y
-  $SUDO apt-get install -y gh
+  apt_get update -y
+  apt_get install -y gh
   ok "gh installed — run 'gh auth login' to authenticate"
 fi

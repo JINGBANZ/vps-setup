@@ -13,7 +13,7 @@ done
 if [ "${#missing[@]}" -gt 0 ]; then
   log "Installing via apt: ${missing[*]}"
   export DEBIAN_FRONTEND=noninteractive
-  $SUDO apt-get update -y
-  $SUDO apt-get install -y "${missing[@]}"
+  apt_get update -y
+  apt_get install -y "${missing[@]}"
   ok "apt packages installed"
 fi
