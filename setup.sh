@@ -19,6 +19,7 @@
 #   modules/50-tailscale.sh     Tailscale                           (install.sh)
 #   modules/60-node-bun.sh      nvm + Node.js (LTS) + Bun
 #   modules/70-agents.sh        Claude Code + Codex CLI
+#   modules/80-sesh.sh          sesh session manager + fzf/zoxide, tmux+shell wiring
 #
 # Usage:
 #   ./setup.sh                 # add sudo if you're not root
@@ -57,6 +58,10 @@ Manual auth steps, as needed:
   - gh:         gh auth login
   - claude:     claude     (sign in on first run)
   - codex:      codex      (sign in with ChatGPT)
+
+Session workflow (sesh):
+  - prefix + T          open the session picker inside tmux (attach or create)
+  - seed your repos:    for d in /workplace/*/; do zoxide add "$d"; done
 
 Baseline security applied: ufw firewall, fail2ban, and automatic security
 updates.

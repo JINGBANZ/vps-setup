@@ -36,6 +36,8 @@ Each command is taken from the tool's official documentation.
 | Bun | Fast JS/TS runtime & package manager | `curl -fsSL https://bun.com/install \| bash` |
 | gh (GitHub CLI) | Drive GitHub (PRs, issues, repos) from CLI | `cli.github.com` signed apt repo |
 | tmux | Keeps agent sessions alive after disconnects | `apt` |
+| sesh | Smart tmux session manager — fuzzy "attach-or-create" picker per task | `go install`, else prebuilt binary |
+| fzf / zoxide | Picker UI and directory tracking for sesh | `apt` / official installer |
 | mosh | Resilient SSH over flaky links | `apt` |
 | Tailscale | Private, secure remote access | `curl -fsSL https://tailscale.com/install.sh \| sh` |
 | ufw | Firewall (see Baseline security) | `apt` |
@@ -78,6 +80,7 @@ modules/
   50-tailscale.sh     # Tailscale
   60-node-bun.sh      # nvm + Node.js (LTS) + Bun
   70-agents.sh        # Claude Code + Codex CLI
+  80-sesh.sh          # sesh session manager + fzf/zoxide, tmux + shell wiring
 ```
 
 Optional tool installers (Claude, Codex, Bun) soft-fail with a warning rather
@@ -97,6 +100,14 @@ These need interactive auth and aren't automated:
 - `gh auth login` — log in to GitHub
 - `claude` — sign in to Claude Code on first run
 - `codex` — sign in with ChatGPT
+
+Session workflow (sesh) is wired up automatically. Inside tmux, `prefix + T`
+opens a fuzzy picker that attaches an existing session or creates one — then you
+start Claude yourself (`claude -w` for an isolated worktree). On first use, seed
+your projects so they show up right away:
+```bash
+for d in /workplace/*/; do zoxide add "$d"; done
+```
 
 ## Customizing
 
