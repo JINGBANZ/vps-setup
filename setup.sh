@@ -59,7 +59,7 @@ Manual auth steps, as needed:
   - claude:     claude     (sign in on first run)
   - codex:      codex      (sign in with ChatGPT)
 
-Session workflow (tmux; sessions open in your WORKSPACE_DIR, default /workspace):
+Session workflow (tmux; sessions open in your WORKSPACE_DIR, default ~/workspace):
   - new/resume: t <task>        (shell shortcut; bare `t` = the "main" session)
   - switch:     prefix + s
 
