@@ -78,7 +78,7 @@ modules/
   50-tailscale.sh     # Tailscale
   60-node-bun.sh      # nvm + Node.js (LTS) + Bun
   70-agents.sh        # Claude Code + Codex CLI
-  80-tmux.sh          # `t` shortcut for per-task /workplace tmux sessions
+  80-tmux.sh          # `t` shortcut for per-task tmux sessions (in $WORKSPACE_DIR)
 ```
 
 Optional tool installers (Claude, Codex, Bun) soft-fail with a warning rather
@@ -101,20 +101,23 @@ These need interactive auth and aren't automated:
 
 ## Session workflow
 
-`80-tmux.sh` sets up one named **tmux** session per task, each rooted at
-`/workplace` — no extra tools, just tmux:
+`80-tmux.sh` sets up one named **tmux** session per task, each rooted at your
+repo directory (`$WORKSPACE_DIR`, default `/workspace`) — no extra tools, just
+tmux:
 
 - **New / resume a task:** `t <task>` — a shell shortcut that attaches the
-  session if it exists or creates it in `/workplace` (bare `t` uses `main`).
+  session if it exists or creates it in `$WORKSPACE_DIR` (bare `t` uses `main`).
 - **Switch tasks:** `prefix + s` (tmux's built-in session picker).
 
-`detach-on-destroy` is left at the tmux default, so finishing a task detaches
-you — handy when each task lives in its own cmux tab that you just close when
-done. Pair it with a cmux custom command that lands you on the box in one
-keypress:
+Point it at a different directory by setting `WORKSPACE_DIR` when you run setup
+(e.g. `WORKSPACE_DIR=/srv/code sudo ./setup.sh`). Re-running with a new value
+refreshes the `t` shortcut in place. `detach-on-destroy` is left at the tmux
+default, so finishing a task detaches you — handy when each task lives in its own
+cmux tab that you just close when done. Pair it with a cmux custom command that
+lands you on the box in one keypress:
 
 ```
-cmux ssh clouddesk -- tmux new-session -A -s main -c /workplace
+cmux ssh clouddesk -- tmux new-session -A -s main -c /workspace
 ```
 
 ## Customizing
@@ -128,6 +131,8 @@ cmux ssh clouddesk -- tmux new-session -A -s main -c /workplace
   curl -fsSL .../bootstrap.sh | sudo SSH_PORT=2222 bash
   ```
 - Pin a different nvm release with `NVM_VERSION=v0.40.x`.
+- Set where the `t` shortcut opens sessions with `WORKSPACE_DIR=/path` (default
+  `/workspace`).
 - Install from a fork/branch with `VPS_SETUP_REPO` / `VPS_SETUP_REF` (defaults
   to this repo's `main`).
 - Add or remove base apt tools via the `APT_PKGS` array in
