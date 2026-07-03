@@ -19,7 +19,7 @@
 #   modules/50-tailscale.sh     Tailscale                           (install.sh)
 #   modules/60-node-bun.sh      nvm + Node.js (LTS) + Bun
 #   modules/70-agents.sh        Claude Code + Codex CLI
-#   modules/80-tmux.sh          `t` shell shortcut for per-task /workplace tmux sessions
+#   modules/80-tmux.sh          `t` shell shortcut for per-task tmux sessions ($WORKSPACE_DIR)
 #
 # Usage:
 #   ./setup.sh                 # add sudo if you're not root
@@ -59,7 +59,7 @@ Manual auth steps, as needed:
   - claude:     claude     (sign in on first run)
   - codex:      codex      (sign in with ChatGPT)
 
-Session workflow (tmux, all under /workplace):
+Session workflow (tmux; sessions open in your WORKSPACE_DIR, default ~/workspace):
   - new/resume: t <task>        (shell shortcut; bare `t` = the "main" session)
   - switch:     prefix + s
 
