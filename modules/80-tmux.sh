@@ -7,8 +7,9 @@
 #
 # Switch between sessions with the built-in prefix + s — no config needed.
 #
-# The target directory is $WORKSPACE_DIR (default /workspace; override via env,
-# e.g. WORKSPACE_DIR=/srv/code ./setup.sh).
+# The target directory is $WORKSPACE_DIR (default ~/workspace, resolved to an
+# absolute path at setup time). Override via env, e.g.
+# WORKSPACE_DIR=/srv/code ./setup.sh. tmux falls back to $HOME if it doesn't exist.
 #
 # Idempotent AND self-updating: the block in ~/.bashrc is managed between markers.
 # A re-run refreshes it when the content differs (e.g. after changing

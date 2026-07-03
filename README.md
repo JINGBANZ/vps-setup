@@ -102,7 +102,7 @@ These need interactive auth and aren't automated:
 ## Session workflow
 
 `80-tmux.sh` sets up one named **tmux** session per task, each rooted at your
-repo directory (`$WORKSPACE_DIR`, default `/workspace`) — no extra tools, just
+repo directory (`$WORKSPACE_DIR`, default `~/workspace`) — no extra tools, just
 tmux:
 
 - **New / resume a task:** `t <task>` — a shell shortcut that attaches the
@@ -117,7 +117,7 @@ cmux tab that you just close when done. Pair it with a cmux custom command that
 lands you on the box in one keypress:
 
 ```
-cmux ssh clouddesk -- tmux new-session -A -s main -c /workspace
+cmux ssh clouddesk -- tmux new-session -A -s main -c "$HOME/workspace"
 ```
 
 ## Customizing
@@ -132,7 +132,8 @@ cmux ssh clouddesk -- tmux new-session -A -s main -c /workspace
   ```
 - Pin a different nvm release with `NVM_VERSION=v0.40.x`.
 - Set where the `t` shortcut opens sessions with `WORKSPACE_DIR=/path` (default
-  `/workspace`).
+  `~/workspace`). Use an existing directory — tmux silently falls back to your
+  home dir if it doesn't exist.
 - Install from a fork/branch with `VPS_SETUP_REPO` / `VPS_SETUP_REF` (defaults
   to this repo's `main`).
 - Add or remove base apt tools via the `APT_PKGS` array in
