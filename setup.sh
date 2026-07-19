@@ -20,6 +20,7 @@
 #   modules/60-node-bun.sh      nvm + Node.js (LTS) + Bun
 #   modules/70-agents.sh        Claude Code + Codex CLI
 #   modules/80-tmux.sh          `t` shell shortcut for per-task tmux sessions ($WORKSPACE_DIR)
+#   modules/85-gh-runner.sh     GitHub Actions self-hosted runner (opt-in: GH_RUNNER_REPO)
 #
 # Usage:
 #   ./setup.sh                 # add sudo if you're not root

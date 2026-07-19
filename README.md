@@ -79,6 +79,7 @@ modules/
   60-node-bun.sh      # nvm + Node.js (LTS) + Bun
   70-agents.sh        # Claude Code + Codex CLI
   80-tmux.sh          # `t` shortcut for per-task tmux sessions (in $WORKSPACE_DIR)
+  85-gh-runner.sh     # GitHub Actions self-hosted runner (opt-in: GH_RUNNER_REPO=owner/repo)
 ```
 
 Optional tool installers (Claude, Codex, Bun) soft-fail with a warning rather
