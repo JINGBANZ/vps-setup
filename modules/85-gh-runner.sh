@@ -13,7 +13,12 @@
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
 GH_RUNNER_REPO="${GH_RUNNER_REPO:-}"
-GH_RUNNER_NAME="${GH_RUNNER_NAME:-vps}"
+# Per-host default name: registering a SECOND VPS to the same repo without setting
+# GH_RUNNER_NAME must not collide, because `--replace` (below) evicts an existing runner
+# of the same name — two hosts both named "vps" would take turns knocking each other
+# offline. The shared LABEL is intentional, though: that's exactly how several runners
+# form one `runs-on: vps` pool.
+GH_RUNNER_NAME="${GH_RUNNER_NAME:-vps-$(hostname -s 2>/dev/null || echo host)}"
 GH_RUNNER_LABELS="${GH_RUNNER_LABELS:-vps}"   # target with `runs-on: vps`
 GH_RUNNER_USER="ghrunner"
 GH_RUNNER_DIR="/opt/actions-runner"
@@ -32,9 +37,24 @@ _runner_do() {
 if [ -z "$GH_RUNNER_REPO" ]; then
   skip "GitHub Actions runner (opt-in: set GH_RUNNER_REPO=owner/repo)"
 elif $SUDO test -f "$GH_RUNNER_DIR/.runner"; then
-  # Already registered. Unregister with `cd $GH_RUNNER_DIR && ./svc.sh uninstall
-  # && ./config.sh remove` before re-running to change repo/name/labels.
-  skip "GitHub Actions runner (already registered in $GH_RUNNER_DIR)"
+  # Already registered — but a prior run may have registered (config.sh) and then failed at
+  # svc.sh, which would leave the runner permanently offline if we simply skipped here every
+  # time. So verify the service is installed AND running, and repair it if not. (To change
+  # repo/name/labels instead, first: cd $GH_RUNNER_DIR && sudo ./svc.sh uninstall && sudo
+  # ./config.sh remove, then re-run.)
+  _svc_name="$($SUDO cat "$GH_RUNNER_DIR/.service" 2>/dev/null || true)"
+  if [ -n "$_svc_name" ] && systemctl is-active --quiet "$_svc_name" 2>/dev/null; then
+    skip "GitHub Actions runner (registered and running in $GH_RUNNER_DIR)"
+  else
+    log "GitHub Actions runner registered but service not running — repairing"
+    if (cd "$GH_RUNNER_DIR" \
+          && { $SUDO test -f .service || $SUDO ./svc.sh install "$GH_RUNNER_USER" >/dev/null; } \
+          && $SUDO ./svc.sh start >/dev/null); then
+      ok "GitHub Actions runner service (re)started"
+    else
+      warn "GitHub runner: service repair failed — check 'cd $GH_RUNNER_DIR && sudo ./svc.sh status'"
+    fi
+  fi
 else
   log "Installing GitHub Actions runner for $GH_RUNNER_REPO"
 
@@ -62,17 +82,21 @@ else
     warn "GitHub runner: unsupported arch '$(uname -m)' or release lookup failed — skipping"
   else
     _gh_runner_tgz="$(mktemp)"
-    curl -fsSL -o "$_gh_runner_tgz" \
-      "https://github.com/actions/runner/releases/download/v${_gh_runner_ver}/actions-runner-linux-${_gh_runner_arch}-${_gh_runner_ver}.tar.gz"
-
-    # Verify the SHA-256 GitHub publishes in the release notes — defense in depth over
-    # the HTTPS transport, catching a corrupted or tampered artifact before we run its
-    # installer as root. The notes tag each asset's hash with a stable marker
-    # (`<!-- BEGIN SHA linux-x64 -->`), so we extract the expected hash for our arch.
+    # Expected hash GitHub publishes in the release notes, tagged per asset with a stable
+    # marker (`<!-- BEGIN SHA linux-x64 -->`); used to verify the download below.
     _gh_runner_sha="$(printf '%s' "$_gh_runner_rel" \
       | grep -o "BEGIN SHA linux-${_gh_runner_arch} -->[0-9a-f]\{64\}" | sed 's/.*-->//')"
 
-    if [ -n "$_gh_runner_sha" ] \
+    # The download gets its own guard: under setup.sh's `set -euo pipefail` a bare failing
+    # curl would abort the whole provisioning run, but this optional installer must only
+    # soft-fail (see the token/arch checks above).
+    if ! curl -fsSL -o "$_gh_runner_tgz" \
+         "https://github.com/actions/runner/releases/download/v${_gh_runner_ver}/actions-runner-linux-${_gh_runner_arch}-${_gh_runner_ver}.tar.gz"; then
+      rm -f "$_gh_runner_tgz"
+      warn "GitHub runner: tarball download failed — skipping install"
+    # Verify the SHA-256 — defense in depth over the HTTPS transport, catching a corrupted or
+    # tampered artifact before we run its installer as root.
+    elif [ -n "$_gh_runner_sha" ] \
        && ! printf '%s  %s\n' "$_gh_runner_sha" "$_gh_runner_tgz" | sha256sum -c --quiet >/dev/null 2>&1; then
       # Mismatch: don't unpack or run the installer from an artifact we can't trust.
       rm -f "$_gh_runner_tgz"
@@ -90,17 +114,29 @@ else
       rm -f "$_gh_runner_tgz"
 
       # .NET runtime deps (libicu & friends) the runner needs; root-only, apt-based.
-      (cd "$GH_RUNNER_DIR" && $SUDO ./bin/installdependencies.sh >/dev/null)
+      # installdependencies.sh shells out to apt itself, so route it through the same
+      # non-interactive env as lib/common.sh's apt_get: $SUDO scrubs the exported
+      # DEBIAN_FRONTEND/NEEDRESTART_MODE, and without them needrestart/debconf can block
+      # on a prompt that never gets a TTY in the `curl | sudo bash` install path.
+      (cd "$GH_RUNNER_DIR" \
+        && $SUDO env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a ./bin/installdependencies.sh >/dev/null)
 
-      (cd "$GH_RUNNER_DIR" && _runner_do ./config.sh --unattended --replace \
-        --url "https://github.com/$GH_RUNNER_REPO" --token "$_gh_runner_token" \
-        --name "$GH_RUNNER_NAME" --labels "$GH_RUNNER_LABELS")
-
-      # svc.sh writes and enables the systemd unit, running jobs as the dedicated user.
-      (cd "$GH_RUNNER_DIR" && $SUDO ./svc.sh install "$GH_RUNNER_USER" >/dev/null \
-        && $SUDO ./svc.sh start >/dev/null)
-
-      ok "runner '$GH_RUNNER_NAME' registered to $GH_RUNNER_REPO (labels: $GH_RUNNER_LABELS)"
+      # config.sh + svc.sh in `if` conditions so a failure soft-fails (warns) instead of
+      # aborting provisioning under `set -e`. If config.sh succeeds but svc.sh fails, the
+      # .runner file exists and a re-run repairs the service via the branch near the top.
+      if (cd "$GH_RUNNER_DIR" && _runner_do ./config.sh --unattended --replace \
+            --url "https://github.com/$GH_RUNNER_REPO" --token "$_gh_runner_token" \
+            --name "$GH_RUNNER_NAME" --labels "$GH_RUNNER_LABELS"); then
+        # svc.sh writes and enables the systemd unit, running jobs as the dedicated user.
+        if (cd "$GH_RUNNER_DIR" && $SUDO ./svc.sh install "$GH_RUNNER_USER" >/dev/null \
+              && $SUDO ./svc.sh start >/dev/null); then
+          ok "runner '$GH_RUNNER_NAME' registered to $GH_RUNNER_REPO (labels: $GH_RUNNER_LABELS)"
+        else
+          warn "GitHub runner: registered but service setup failed — re-run setup.sh to retry"
+        fi
+      else
+        warn "GitHub runner: config.sh failed — skipping"
+      fi
     fi
   fi
 fi
