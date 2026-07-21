@@ -49,8 +49,10 @@ else
     aarch64) _gh_runner_arch=arm64 ;;
     *)       _gh_runner_arch="" ;;
   esac
-  _gh_runner_ver="$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest \
-    | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')"
+  # One fetch of the release metadata: it carries both the version tag and, in the
+  # release notes, each asset's published SHA-256 (used below to verify the download).
+  _gh_runner_rel="$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest || true)"
+  _gh_runner_ver="$(printf '%s' "$_gh_runner_rel" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')"
 
   # Soft-fail like the other optional installers: a runner is a nice-to-have,
   # baseline provisioning must still complete.
@@ -59,28 +61,46 @@ else
   elif [ -z "$_gh_runner_arch" ] || [ -z "$_gh_runner_ver" ]; then
     warn "GitHub runner: unsupported arch '$(uname -m)' or release lookup failed — skipping"
   else
-    id -u "$GH_RUNNER_USER" >/dev/null 2>&1 \
-      || $SUDO useradd --create-home --shell /bin/bash "$GH_RUNNER_USER"
-    $SUDO install -d -o "$GH_RUNNER_USER" -g "$GH_RUNNER_USER" "$GH_RUNNER_DIR"
-
     _gh_runner_tgz="$(mktemp)"
     curl -fsSL -o "$_gh_runner_tgz" \
       "https://github.com/actions/runner/releases/download/v${_gh_runner_ver}/actions-runner-linux-${_gh_runner_arch}-${_gh_runner_ver}.tar.gz"
-    chmod 0644 "$_gh_runner_tgz"   # mktemp is 0600; the runner user must read it
-    (cd "$GH_RUNNER_DIR" && _runner_do tar -xzf "$_gh_runner_tgz")
-    rm -f "$_gh_runner_tgz"
 
-    # .NET runtime deps (libicu & friends) the runner needs; root-only, apt-based.
-    (cd "$GH_RUNNER_DIR" && $SUDO ./bin/installdependencies.sh >/dev/null)
+    # Verify the SHA-256 GitHub publishes in the release notes — defense in depth over
+    # the HTTPS transport, catching a corrupted or tampered artifact before we run its
+    # installer as root. The notes tag each asset's hash with a stable marker
+    # (`<!-- BEGIN SHA linux-x64 -->`), so we extract the expected hash for our arch.
+    _gh_runner_sha="$(printf '%s' "$_gh_runner_rel" \
+      | grep -o "BEGIN SHA linux-${_gh_runner_arch} -->[0-9a-f]\{64\}" | sed 's/.*-->//')"
 
-    (cd "$GH_RUNNER_DIR" && _runner_do ./config.sh --unattended --replace \
-      --url "https://github.com/$GH_RUNNER_REPO" --token "$_gh_runner_token" \
-      --name "$GH_RUNNER_NAME" --labels "$GH_RUNNER_LABELS")
+    if [ -n "$_gh_runner_sha" ] \
+       && ! printf '%s  %s\n' "$_gh_runner_sha" "$_gh_runner_tgz" | sha256sum -c --quiet >/dev/null 2>&1; then
+      # Mismatch: don't unpack or run the installer from an artifact we can't trust.
+      rm -f "$_gh_runner_tgz"
+      warn "GitHub runner: SHA-256 mismatch on downloaded tarball — skipping install"
+    else
+      [ -n "$_gh_runner_sha" ] \
+        || warn "GitHub runner: no published SHA-256 found in release notes — proceeding on HTTPS trust only"
 
-    # svc.sh writes and enables the systemd unit, running jobs as the dedicated user.
-    (cd "$GH_RUNNER_DIR" && $SUDO ./svc.sh install "$GH_RUNNER_USER" >/dev/null \
-      && $SUDO ./svc.sh start >/dev/null)
+      id -u "$GH_RUNNER_USER" >/dev/null 2>&1 \
+        || $SUDO useradd --create-home --shell /bin/bash "$GH_RUNNER_USER"
+      $SUDO install -d -o "$GH_RUNNER_USER" -g "$GH_RUNNER_USER" "$GH_RUNNER_DIR"
 
-    ok "runner '$GH_RUNNER_NAME' registered to $GH_RUNNER_REPO (labels: $GH_RUNNER_LABELS)"
+      chmod 0644 "$_gh_runner_tgz"   # mktemp is 0600; the runner user must read it
+      (cd "$GH_RUNNER_DIR" && _runner_do tar -xzf "$_gh_runner_tgz")
+      rm -f "$_gh_runner_tgz"
+
+      # .NET runtime deps (libicu & friends) the runner needs; root-only, apt-based.
+      (cd "$GH_RUNNER_DIR" && $SUDO ./bin/installdependencies.sh >/dev/null)
+
+      (cd "$GH_RUNNER_DIR" && _runner_do ./config.sh --unattended --replace \
+        --url "https://github.com/$GH_RUNNER_REPO" --token "$_gh_runner_token" \
+        --name "$GH_RUNNER_NAME" --labels "$GH_RUNNER_LABELS")
+
+      # svc.sh writes and enables the systemd unit, running jobs as the dedicated user.
+      (cd "$GH_RUNNER_DIR" && $SUDO ./svc.sh install "$GH_RUNNER_USER" >/dev/null \
+        && $SUDO ./svc.sh start >/dev/null)
+
+      ok "runner '$GH_RUNNER_NAME' registered to $GH_RUNNER_REPO (labels: $GH_RUNNER_LABELS)"
+    fi
   fi
 fi
