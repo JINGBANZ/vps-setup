@@ -15,12 +15,14 @@
 #   modules/20-firewall.sh      ufw (default-deny, SSH/mosh/tailscale allowed)
 #   modules/25-fail2ban.sh      fail2ban sshd jail
 #   modules/30-auto-updates.sh  unattended-upgrades (auto security patches)
+#   modules/35-disk-guard.sh    journal cap + disk-usage warning timer (prunes Docker caches at 90%)
 #   modules/40-gh.sh            GitHub CLI                          (apt repo)
 #   modules/50-tailscale.sh     Tailscale                           (install.sh)
 #   modules/60-node-bun.sh      nvm + Node.js (LTS) + Bun
 #   modules/70-agents.sh        Claude Code + Codex CLI
 #   modules/80-tmux.sh          `t` shell shortcut for per-task tmux sessions ($WORKSPACE_DIR)
 #   modules/85-gh-runner.sh     GitHub Actions self-hosted runner (opt-in: GH_RUNNER_REPO)
+#   modules/90-postgres.sh      shared local PostgreSQL, socket + peer auth (opt-in: DEV_POSTGRES=1)
 #
 # Usage:
 #   ./setup.sh                 # add sudo if you're not root
