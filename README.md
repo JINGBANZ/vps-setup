@@ -74,12 +74,14 @@ modules/
   20-firewall.sh      # ufw (default-deny; SSH/mosh/tailscale allowed first)
   25-fail2ban.sh      # fail2ban sshd jail
   30-auto-updates.sh  # unattended-upgrades
+  35-disk-guard.sh    # journal cap + disk-usage warning timer
   40-gh.sh            # GitHub CLI (signed apt repo)
   50-tailscale.sh     # Tailscale
   60-node-bun.sh      # nvm + Node.js (LTS) + Bun
   70-agents.sh        # Claude Code + Codex CLI
   80-tmux.sh          # `t` shortcut for per-task tmux sessions (in $WORKSPACE_DIR)
   85-gh-runner.sh     # GitHub Actions self-hosted runner (opt-in: GH_RUNNER_REPO=owner/repo)
+  90-postgres.sh      # shared local PostgreSQL (opt-in: DEV_POSTGRES=1)
 ```
 
 Optional tool installers (Claude, Codex, Bun) soft-fail with a warning rather
@@ -90,6 +92,33 @@ default, override with `LOGFILE=...`).
 are only rewritten when their content differs — so a re-run on an already-set-up
 box changes nothing and restarts no services. Re-run any time to fill in
 whatever's missing.
+
+## Disk guard
+
+A full root disk takes sshd, journald and tmux down with it, and parallel agents
+building in separate worktrees get there fast. `35-disk-guard.sh` caps the
+journal at 200M and installs `disk-guard.timer`, which checks `/` every 10
+minutes:
+
+- at **80%** it logs a warning (`journalctl -t disk-guard`) and flashes it on every
+  attached tmux client, at most once an hour;
+- at **90%** it also prunes the Docker build cache and dangling images.
+
+It deletes nothing else — build outputs and volumes may belong to a running
+session. Change the thresholds with `DISK_GUARD_WARN_PCT` / `DISK_GUARD_CLEAN_PCT`
+when running setup.
+
+## Shared PostgreSQL
+
+`DEV_POSTGRES=1 ./setup.sh` installs the distro's PostgreSQL as one server that
+every project and worktree shares, instead of a database container each. It
+listens on its Unix socket only, and your login user gets a superuser role of the
+same name through peer authentication, so there is no password anywhere:
+
+```
+psql postgres
+postgresql://$USER@%2Fvar%2Frun%2Fpostgresql/postgres   # as a URL
+```
 
 ## Manual steps after running
 
