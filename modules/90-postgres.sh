@@ -51,7 +51,13 @@ EOF
   # A role someone created by hand is reported rather than altered: changing
   # its privileges is the owner's decision, not a provisioning side effect.
   _pg_role="$(_pg_do psql -tAc "SELECT rolsuper AND rolcanlogin FROM pg_roles WHERE rolname = '$TARGET_USER'")"
-  if [ "$_pg_role" = "t" ]; then
+  # The superuser role is safe only because peer authentication ties it to one
+  # OS user. A pre-existing cluster with a local `trust` rule would hand it to
+  # every local user, so refuse rather than create it there.
+  _pg_trust="$(_pg_do psql -tAc "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'local' AND auth_method = 'trust'")"
+  if [ "$_pg_trust" != "0" ]; then
+    warn "PostgreSQL has a local 'trust' rule in pg_hba.conf — not creating a superuser role for '$TARGET_USER'"
+  elif [ "$_pg_role" = "t" ]; then
     skip "PostgreSQL role '$TARGET_USER' (already exists)"
   elif [ "$_pg_role" = "f" ]; then
     warn "PostgreSQL role '$TARGET_USER' exists without LOGIN SUPERUSER — left unchanged"
