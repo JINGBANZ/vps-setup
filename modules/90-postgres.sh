@@ -48,8 +48,13 @@ EOF
   # superuser that project CI and Compose databases give their tests. It is a
   # development box whose login user already holds sudo, so this grants nothing
   # the user could not take anyway.
-  if _pg_do psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '$TARGET_USER'" | grep -q 1; then
+  # A role someone created by hand is reported rather than altered: changing
+  # its privileges is the owner's decision, not a provisioning side effect.
+  _pg_role="$(_pg_do psql -tAc "SELECT rolsuper AND rolcanlogin FROM pg_roles WHERE rolname = '$TARGET_USER'")"
+  if [ "$_pg_role" = "t" ]; then
     skip "PostgreSQL role '$TARGET_USER' (already exists)"
+  elif [ "$_pg_role" = "f" ]; then
+    warn "PostgreSQL role '$TARGET_USER' exists without LOGIN SUPERUSER — left unchanged"
   else
     _pg_do createuser --superuser "$TARGET_USER"
     ok "PostgreSQL role '$TARGET_USER' (peer authentication, superuser)"
