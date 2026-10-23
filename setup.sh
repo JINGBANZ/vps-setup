@@ -33,6 +33,13 @@ set -euo pipefail
 # Resolve our own directory so the script works from any cwd.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Keep the Linux provisioning path separate from macOS services and Homebrew.
+case "$(uname -s)" in
+  Darwin) exec bash "$SCRIPT_DIR/macos/setup.sh" "$@" ;;
+  Linux) ;;
+  *) echo "Supported hosts: Debian/Ubuntu Linux and macOS." >&2; exit 1 ;;
+esac
+
 # shellcheck source=lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
 
@@ -69,3 +76,4 @@ Session workflow (tmux; sessions open in your WORKSPACE_DIR, default ~/workspace
 Baseline security applied: ufw firewall, fail2ban, and automatic security
 updates.
 EOF
+

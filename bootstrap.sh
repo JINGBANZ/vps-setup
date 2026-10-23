@@ -6,6 +6,9 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh | sudo bash
 #
+# macOS: run as your normal user WITHOUT sudo; prefer downloading this script
+# first and running it from Terminal so Homebrew can prompt. See macos/README.md.
+#
 # It downloads the repo (tarball, with a git fallback) into a temp dir and runs
 # setup.sh from it. setup.sh and its modules are the real logic; this file just
 # fetches them — the same "tiny bootstrap loader" pattern the Claude/rustup
@@ -59,9 +62,10 @@ main() {
   fi
 
   echo "==> Running setup.sh"
-  # Already privileged (run under sudo/root); setup.sh's own SUDO logic handles
-  # the rest. Env vars set by the caller flow through unchanged.
+  # Linux may run under sudo; macOS must run as the normal user. setup.sh
+  # dispatches to the right platform. Caller environment flows through unchanged.
   bash "$tmp/setup.sh" "$@"
 }
 
 main "$@"
+

@@ -1,10 +1,33 @@
 # VPS Setup
 
-`setup.sh` provisions a fresh **Debian/Ubuntu** VPS for an **AI-assisted
-development workflow** in one command — installing AI coding agents, their
-runtimes, and a baseline security setup so a brand-new box is ready to use.
+`setup.sh` provisions a **Debian/Ubuntu VPS or macOS desktop** for an
+**AI-assisted development workflow**: connect over SSH, enter a tmux session,
+and run Claude Code or Codex. No editor or VS Code installation is required.
+
+The script detects the OS. Linux uses the modules below; macOS uses Homebrew
+and a Tailscale system service. See the [Mac mini setup guide](macos/README.md)
+for Wi-Fi, optional Screen Sharing, and reboot recovery.
 
 ## Quick start
+
+### Mac mini
+
+Run in Terminal as your normal administrator account, **without sudo**:
+
+```bash
+# On a fresh Mac, install Command Line Tools first and wait for it to finish:
+xcode-select --install
+
+git clone https://github.com/JINGBANZ/vps-setup.git
+cd vps-setup
+bash setup.sh
+```
+
+The script requests sudo for system settings/services when needed. Finish the
+one-time Sharing settings and authentication steps in the
+[Mac guide](macos/README.md) before leaving the mini unattended.
+
+### Debian/Ubuntu VPS
 
 Run this on the VPS as a **non-root user with `sudo`**:
 
@@ -23,7 +46,7 @@ sudo ./setup.sh
 source ~/.bashrc
 ```
 
-## Tools installed
+## Tools installed on Linux
 
 Each command is taken from the tool's official documentation.
 
@@ -41,7 +64,7 @@ Each command is taken from the tool's official documentation.
 | ufw | Firewall (see Baseline security) | `apt` |
 | git / curl / unzip | Version control + installer plumbing | `apt` |
 
-## Baseline security
+## Linux baseline security
 
 Firewall, fail2ban, and auto-updates run *before* the network-heavy third-party
 installers, so a transient CDN failure can't leave the box unhardened. These are
@@ -66,6 +89,9 @@ numbered file into `modules/`.
 ```
 bootstrap.sh          # one-command remote installer
 setup.sh              # orchestrator: sources lib, loops over modules/, logs output
+macos/
+  setup.sh            # Homebrew, power settings, Tailscale LaunchDaemon, zsh/bash
+  README.md           # Mac mini setup and remote access guide
 lib/
   common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
 modules/
@@ -93,7 +119,7 @@ are only rewritten when their content differs — so a re-run on an already-set-
 box changes nothing and restarts no services. Re-run any time to fill in
 whatever's missing.
 
-## Disk guard
+## Disk guard (Linux)
 
 A full root disk takes sshd, journald and tmux down with it, and parallel agents
 building in separate worktrees get there fast. `35-disk-guard.sh` caps the
@@ -108,7 +134,7 @@ It deletes nothing else — build outputs and volumes may belong to a running
 session. Change the thresholds with `DISK_GUARD_WARN_PCT` / `DISK_GUARD_CLEAN_PCT`
 when running setup.
 
-## Shared PostgreSQL
+## Shared PostgreSQL (Linux)
 
 `DEV_POSTGRES=1 ./setup.sh` installs the distro's PostgreSQL as one server that
 every project and worktree shares, instead of a database container each. It
@@ -150,7 +176,7 @@ lands you on the box in one keypress:
 cmux ssh clouddesk -- tmux new-session -A -s main -c "$HOME/workspace"
 ```
 
-## Customizing
+## Customizing Linux setup
 
 - **Run as non-root with `sudo`**, not as root directly — user-level tools (nvm,
   Bun, claude, codex) install for `$SUDO_USER`, and `source ~/.bashrc` loads
@@ -168,3 +194,4 @@ cmux ssh clouddesk -- tmux new-session -A -s main -c "$HOME/workspace"
   to this repo's `main`).
 - Add or remove base apt tools via the `APT_PKGS` array in
   `modules/10-apt-tools.sh`.
+

@@ -17,17 +17,27 @@
 # .bashrc content outside the markers is always preserved.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
-bashrc="$HOME/.bashrc"
+bashrc="${TMUX_RC_FILE:-$HOME/.bashrc}"
+# Bash's %q also produces valid zsh quoting. Never interpolate a raw directory
+# into executable shell code: spaces, apostrophes and dollar signs are valid.
+printf -v workspace_quoted '%q' "$WORKSPACE_DIR"
 
 # Desired block. Unquoted heredoc so $WORKSPACE_DIR is baked in now; the function's
 # own runtime variables ($1, $n, $TMUX) are escaped so they stay literal.
 desired="$(cat <<EOF
 # --- vps-setup:tmux ---
-# t [name] — attach or create a $WORKSPACE_DIR tmux session (default: main)
+# t [name] — attach or create a task session (default: main)
 t() {
   local n=\${1:-main}
-  tmux has-session -t "=\$n" 2>/dev/null || tmux new-session -ds "\$n" -c $WORKSPACE_DIR
-  [ -n "\$TMUX" ] && tmux switch-client -t "\$n" || tmux attach -t "\$n"
+  case "\$n" in
+    *[!a-zA-Z0-9_-]*) printf '%s\\n' 'Use a task name containing letters, numbers, _ or -.' >&2; return 1 ;;
+  esac
+  tmux has-session -t "=\$n" 2>/dev/null || tmux new-session -ds "\$n" -c $workspace_quoted || return
+  if [ -n "\${TMUX:-}" ]; then
+    tmux switch-client -t "=\$n"
+  else
+    tmux attach -t "=\$n"
+  fi
 }
 # --- end vps-setup:tmux ---
 EOF
@@ -56,3 +66,4 @@ else
   printf '\n%s\n' "$desired" >> "$bashrc"
   ok "bashrc updated (t() → $WORKSPACE_DIR)"
 fi
+
