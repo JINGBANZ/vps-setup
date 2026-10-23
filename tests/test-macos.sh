@@ -133,9 +133,19 @@ snapshot() {
     "$test_home/.profile" "$test_home/.config/vps-setup/"*
 }
 before="$(snapshot)"
+mkdir -p "$state/before"
+cp "$test_home/.config/vps-setup/"* "$state/before/"
+cp "$test_home/.zshrc" "$test_home/.zprofile" "$test_home/.bashrc" "$test_home/.profile" "$state/before/"
 : > "$state/calls"
 run_setup || fail 'repeat setup'
-[ "$(snapshot)" = "$before" ] || fail 'repeat setup changed shell config or backup'
+if [ "$(snapshot)" != "$before" ]; then
+  for file in "$test_home/.zshrc" "$test_home/.zprofile" "$test_home/.bashrc" \
+    "$test_home/.profile" "$test_home/.config/vps-setup/"*; do
+    diff -u "$state/before/$(basename "$file")" "$file" || true
+  done
+  cat "$state/output"
+  fail 'repeat setup changed shell config or backup'
+fi
 if grep -Eq '^brew install|^power ' "$state/calls"; then
   fail 'repeat setup reinstalled packages or rewrote power settings'
 fi
