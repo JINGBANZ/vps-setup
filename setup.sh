@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# setup.sh — provision a fresh Debian/Ubuntu VPS for an AI-assisted dev workflow.
+# setup.sh — provision Debian/Ubuntu or macOS for an AI-assisted dev workflow.
+# macOS dispatches to macos/setup.sh; the modules described below are for Linux.
 #
 # Thin orchestrator: sources shared helpers (lib/common.sh), then runs each
 # module in modules/ in filename order. Each module is self-contained and

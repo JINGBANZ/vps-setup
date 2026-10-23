@@ -127,6 +127,10 @@ run_setup || { cat "$state/output"; fail 'fresh Mac setup'; }
 grep -qx '# existing customization' "$test_home/.zshrc" || fail 'zsh customization lost'
 grep -qx '# existing bash login profile' "$test_home/.profile" || fail 'bash customization lost'
 grep -q 'sleep 1' "$test_home/.config/vps-setup/power-settings-before.txt" || fail 'no power backup'
+/bin/bash -n "$test_home/.config/vps-setup/tmux.sh" || fail 'generated tmux syntax'
+if grep -qx EOF "$test_home/.config/vps-setup/tmux.sh"; then
+  fail 'heredoc delimiter leaked into generated shell code'
+fi
 
 snapshot() {
   cksum "$test_home/.zshrc" "$test_home/.zprofile" "$test_home/.bashrc" \

@@ -22,9 +22,11 @@ bashrc="${TMUX_RC_FILE:-$HOME/.bashrc}"
 # into executable shell code: spaces, apostrophes and dollar signs are valid.
 printf -v workspace_quoted '%q' "$WORKSPACE_DIR"
 
-# Desired block. Unquoted heredoc so $WORKSPACE_DIR is baked in now; the function's
-# own runtime variables ($1, $n, $TMUX) are escaped so they stay literal.
-desired="$(cat <<EOF
+# Keep the heredoc outside command substitution: Apple's Bash 3.2 can misparse
+# a case pattern's closing parenthesis inside that combination. Runtime
+# variables ($1, $n, $TMUX) remain escaped; only the quoted workspace is baked in.
+blockfile="$(mktemp)"
+cat > "$blockfile" <<EOF
 # --- vps-setup:tmux ---
 # t [name] — attach or create a task session (default: main)
 t() {
@@ -41,7 +43,8 @@ t() {
 }
 # --- end vps-setup:tmux ---
 EOF
-)"
+desired="$(cat "$blockfile")"
+rm -f "$blockfile"
 
 # What's currently installed between the markers (empty if none).
 current="$(sed -n '/^# --- vps-setup:tmux ---$/,/^# --- end vps-setup:tmux ---$/p' "$bashrc" 2>/dev/null || true)"
