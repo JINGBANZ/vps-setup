@@ -17,21 +17,34 @@
 # .bashrc content outside the markers is always preserved.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
-bashrc="$HOME/.bashrc"
+bashrc="${TMUX_RC_FILE:-$HOME/.bashrc}"
+# Bash's %q also produces valid zsh quoting. Never interpolate a raw directory
+# into executable shell code: spaces, apostrophes and dollar signs are valid.
+printf -v workspace_quoted '%q' "$WORKSPACE_DIR"
 
-# Desired block. Unquoted heredoc so $WORKSPACE_DIR is baked in now; the function's
-# own runtime variables ($1, $n, $TMUX) are escaped so they stay literal.
-desired="$(cat <<EOF
+# Keep the heredoc outside command substitution: Apple's Bash 3.2 can misparse
+# a case pattern's closing parenthesis inside that combination. Runtime
+# variables ($1, $n, $TMUX) remain escaped; only the quoted workspace is baked in.
+blockfile="$(mktemp)"
+cat > "$blockfile" <<EOF
 # --- vps-setup:tmux ---
-# t [name] — attach or create a $WORKSPACE_DIR tmux session (default: main)
+# t [name] — attach or create a task session (default: main)
 t() {
   local n=\${1:-main}
-  tmux has-session -t "=\$n" 2>/dev/null || tmux new-session -ds "\$n" -c $WORKSPACE_DIR
-  [ -n "\$TMUX" ] && tmux switch-client -t "\$n" || tmux attach -t "\$n"
+  case "\$n" in
+    *[!a-zA-Z0-9_-]*) printf '%s\\n' 'Use a task name containing letters, numbers, _ or -.' >&2; return 1 ;;
+  esac
+  tmux has-session -t "=\$n" 2>/dev/null || tmux new-session -ds "\$n" -c $workspace_quoted || return
+  if [ -n "\${TMUX:-}" ]; then
+    tmux switch-client -t "=\$n"
+  else
+    tmux attach -t "=\$n"
+  fi
 }
 # --- end vps-setup:tmux ---
 EOF
-)"
+desired="$(cat "$blockfile")"
+rm -f "$blockfile"
 
 # What's currently installed between the markers (empty if none).
 current="$(sed -n '/^# --- vps-setup:tmux ---$/,/^# --- end vps-setup:tmux ---$/p' "$bashrc" 2>/dev/null || true)"
@@ -56,3 +69,4 @@ else
   printf '\n%s\n' "$desired" >> "$bashrc"
   ok "bashrc updated (t() → $WORKSPACE_DIR)"
 fi
+

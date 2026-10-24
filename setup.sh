@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# setup.sh — provision a fresh Debian/Ubuntu VPS for an AI-assisted dev workflow.
+# setup.sh — provision Debian/Ubuntu or macOS for an AI-assisted dev workflow.
+# macOS dispatches to macos/setup.sh; the modules described below are for Linux.
 #
 # Thin orchestrator: sources shared helpers (lib/common.sh), then runs each
 # module in modules/ in filename order. Each module is self-contained and
@@ -32,6 +33,18 @@ set -euo pipefail
 
 # Resolve our own directory so the script works from any cwd.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Keep the Linux provisioning path separate from macOS services and Homebrew.
+case "$(uname -s)" in
+  Darwin) exec bash "$SCRIPT_DIR/macos/setup.sh" "$@" ;;
+  Linux) ;;
+  *) echo "Supported hosts: Debian/Ubuntu Linux and macOS." >&2; exit 1 ;;
+esac
+
+if [ "$#" -ne 0 ]; then
+  echo 'Selection/check/dry-run options currently apply to macOS only; Linux setup takes no arguments.' >&2
+  exit 1
+fi
 
 # shellcheck source=lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
@@ -69,3 +82,4 @@ Session workflow (tmux; sessions open in your WORKSPACE_DIR, default ~/workspace
 Baseline security applied: ufw firewall, fail2ban, and automatic security
 updates.
 EOF
+

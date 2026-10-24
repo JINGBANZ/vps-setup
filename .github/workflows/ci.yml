@@ -14,14 +14,26 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Syntax check (bash -n)
         run: |
-          for f in bootstrap.sh setup.sh lib/*.sh modules/*.sh tests/*.sh; do
+          for f in bootstrap.sh setup.sh lib/*.sh modules/*.sh macos/*.sh tests/*.sh; do
             echo "bash -n $f"
             bash -n "$f"
           done
       - name: ShellCheck
         # -S warning: fail on real problems, ignore info/style nits so CI tracks
         # correctness, not formatting. -x follows `source`d files.
-        run: shellcheck -x -S warning bootstrap.sh setup.sh lib/*.sh modules/*.sh tests/*.sh
+        run: shellcheck -x -S warning bootstrap.sh setup.sh lib/*.sh modules/*.sh macos/*.sh tests/*.sh
+
+  macos-setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: macOS setup behavior (isolated commands, no system changes)
+        # Use Apple's Bash 3.2 on macOS, rather than Homebrew's newer bash.
+        run: /bin/bash tests/test-macos.sh
 
   # Regression guard for the fresh-box install hang: debconf/needrestart trying
   # to prompt with no TTY (the `curl | sudo bash` path). Runs on the two Ubuntu
@@ -47,3 +59,4 @@ jobs:
         run: bash tests/test-apt-env.sh
       - name: Fresh-box install does not hang (end-to-end)
         run: bash tests/test-fresh-install.sh
+

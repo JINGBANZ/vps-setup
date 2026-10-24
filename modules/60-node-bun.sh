@@ -2,6 +2,7 @@
 # 60-node-bun.sh — JS/TS runtimes: nvm + Node.js (LTS), and Bun.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
+if [ "${INSTALL_NODE:-1}" = 1 ]; then
 # --- nvm (official versioned installer) -----------------------------------
 # Resolve NVM_DIR the way nvm's official profile snippet does (honors
 # XDG_CONFIG_HOME, falling back to ~/.nvm).
@@ -23,7 +24,7 @@ fi
 # Then a re-run reliably detects an existing install and skips (instead of
 # redundantly re-running `nvm install`). No-op/harmless if no default is set yet.
 nvm use default >/dev/null 2>&1 || true
-if have node; then
+if have node && node --version >/dev/null 2>&1; then
   skip "Node.js ($(node --version 2>/dev/null))"
 else
   log "Installing Node.js LTS via nvm"
@@ -32,8 +33,12 @@ else
   ok "Node.js installed ($(node --version 2>/dev/null))"
 fi
 
+fi # INSTALL_NODE
+
+if [ "${INSTALL_BUN:-1}" = 1 ]; then
 # --- Bun (official installer; needs unzip from 10-apt-tools.sh) ------------
-if have bun || [ -x "$HOME/.bun/bin/bun" ]; then
+if { have bun && bun --version >/dev/null 2>&1; } ||
+   { [ -x "$HOME/.bun/bin/bun" ] && "$HOME/.bun/bin/bun" --version >/dev/null 2>&1; }; then
   skip "bun"
 else
   log "Installing Bun"
@@ -44,3 +49,5 @@ else
     warn "Bun install failed (transient network/CDN?) — skipping; re-run later"
   fi
 fi
+fi # INSTALL_BUN
+

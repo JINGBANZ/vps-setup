@@ -24,7 +24,12 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # The user we install user-level tools for. Under sudo this is the original
 # login user, not root.
 TARGET_USER="${SUDO_USER:-$(id -un)}"
-TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+if [ "$(uname -s)" = Darwin ]; then
+  # macos/setup.sh requires the logged-in, non-root user. macOS has no getent.
+  TARGET_HOME="$HOME"
+else
+  TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+fi
 [ -n "$TARGET_HOME" ] || TARGET_HOME="$HOME"
 
 # --- non-interactive apt --------------------------------------------------
@@ -91,3 +96,4 @@ write_config() {
 NVM_VERSION="${NVM_VERSION:-v0.40.5}"   # pinned nvm release
 SSH_PORT="${SSH_PORT:-22}"               # firewall/fail2ban target port
 WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/workspace}"  # where repos live; the `t` shortcut cd's here
+
