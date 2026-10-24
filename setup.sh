@@ -41,6 +41,11 @@ case "$(uname -s)" in
   *) echo "Supported hosts: Debian/Ubuntu Linux and macOS." >&2; exit 1 ;;
 esac
 
+if [ "$#" -ne 0 ]; then
+  echo 'Selection/check/dry-run options currently apply to macOS only; Linux setup takes no arguments.' >&2
+  exit 1
+fi
+
 # shellcheck source=lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
 

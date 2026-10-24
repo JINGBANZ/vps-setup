@@ -5,7 +5,7 @@
 and run Claude Code or Codex. No editor or VS Code installation is required.
 
 The script detects the OS. Linux uses the modules below; macOS uses Homebrew
-and a Tailscale system service. See the [Mac mini setup guide](macos/README.md)
+and interactive component selection. See the [Mac mini setup guide](macos/README.md)
 for Wi-Fi, optional Screen Sharing, and reboot recovery.
 
 ## Quick start
@@ -23,7 +23,11 @@ cd vps-setup
 bash setup.sh
 ```
 
-The script requests sudo for system settings/services when needed. Finish the
+The Mac onboarding shows installed versions and configuration, lets you choose
+components, then reviews the plan before applying it. Node.js and Bun default
+off. Use `bash setup.sh --check` for read-only inspection or `--dry-run` for a
+plan. Existing working tools are reused and original shell files are backed up.
+The script requests sudo for selected system settings/services when needed. Finish the
 one-time Sharing settings and authentication steps in the
 [Mac guide](macos/README.md) before leaving the mini unattended.
 
@@ -90,7 +94,9 @@ numbered file into `modules/`.
 bootstrap.sh          # one-command remote installer
 setup.sh              # orchestrator: sources lib, loops over modules/, logs output
 macos/
-  setup.sh            # Homebrew, power settings, Tailscale LaunchDaemon, zsh/bash
+  setup.sh            # interactive selection and selected provisioning
+  lib.sh              # detection, plans, configuration and service helpers
+  design.html         # interactive architecture and onboarding illustration
   README.md           # Mac mini setup and remote access guide
 lib/
   common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
@@ -110,7 +116,7 @@ modules/
   90-postgres.sh      # shared local PostgreSQL (opt-in: DEV_POSTGRES=1)
 ```
 
-Optional tool installers (Claude, Codex, Bun) soft-fail with a warning rather
+On Linux, optional tool installers (Claude, Codex, Bun) soft-fail with a warning rather
 than aborting the run. All output is appended to a logfile (`~/vps-setup.log` by
 default, override with `LOGFILE=...`).
 

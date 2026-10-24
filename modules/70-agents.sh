@@ -9,8 +9,10 @@
 # continue so the rest of the run completes; the user can re-run to retry.
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
+if [ "${INSTALL_CLAUDE:-1}" = 1 ]; then
 # --- Claude Code (official native installer) -------------------------------
-if have claude || [ -x "$HOME/.local/bin/claude" ]; then
+if { have claude && claude --version >/dev/null 2>&1; } ||
+   { [ -x "$HOME/.local/bin/claude" ] && "$HOME/.local/bin/claude" --version >/dev/null 2>&1; }; then
   skip "Claude Code"
 else
   log "Installing Claude Code"
@@ -21,8 +23,12 @@ else
   fi
 fi
 
+fi # INSTALL_CLAUDE
+
+if [ "${INSTALL_CODEX:-1}" = 1 ]; then
 # --- Codex CLI (official installer; installs to ~/.local/bin/codex) ---------
-if have codex || [ -x "$HOME/.local/bin/codex" ]; then
+if { have codex && codex --version >/dev/null 2>&1; } ||
+   { [ -x "$HOME/.local/bin/codex" ] && "$HOME/.local/bin/codex" --version >/dev/null 2>&1; }; then
   skip "codex"
 else
   log "Installing Codex CLI"
@@ -32,3 +38,5 @@ else
     warn "Codex install failed (transient?) — skipping; re-run later"
   fi
 fi
+fi # INSTALL_CODEX
+
