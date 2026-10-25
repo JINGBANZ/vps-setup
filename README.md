@@ -1,189 +1,129 @@
 # VPS Setup
 
-`setup.sh` provisions a **Debian/Ubuntu VPS or macOS desktop** for an
-**AI-assisted development workflow**: connect over SSH, enter a tmux session,
-and run Claude Code or Codex. No editor or VS Code installation is required.
+Set up a **Debian/Ubuntu VPS or Mac mini** for terminal development with Codex,
+Claude Code, Mosh and tmux. Both platforms share the same interactive onboarding.
 
-The script detects the OS. Linux uses the modules below; macOS uses Homebrew
-and interactive component selection. See the [Mac mini setup guide](macos/README.md)
-for installation choices and the manual server checklist.
+## Run
 
-## Quick start
-
-Run the command on the machine you want to set up.
-
-**Mac mini — run as your normal administrator user, without sudo:**
+Run this **on the machine you want to set up**, as your normal user, without
+prefixing the command with sudo:
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
 ```
 
-Choose missing tools or configuration updates, press **Enter**, then type
-`apply`. Installed tools, including Tailscale, stay locked and unchanged.
-Homebrew is added only when needed. If prompted, finish
-`xcode-select --install` and rerun setup. Sharing and power settings stay manual.
+No clone or pull is needed. Setup downloads into a temporary directory and
+cleans up on exit. Linux requests sudo when selected system work needs it;
+macOS's Homebrew installer may request administrator authorization. Direct root
+use remains supported on Linux for installations intended for root. An outer
+`sudo` invocation from a normal account is rejected to avoid installing that
+user's tools and shell configuration as root.
 
-**Debian/Ubuntu VPS — run from your normal user account with sudo:**
+Use **↑/↓** to move, **Space** to toggle, **Ctrl-A** for all/none, and **Enter**
+to continue. Review the plan and choose **Install** or **Cancel** (the default).
+**Esc / Ctrl-C** cancels. Installed tools and broken installations appear in a
+read-only summary, without checkboxes; broken tools need manual repair.
+
+The script bootstraps [Gum v0.17.0](https://github.com/charmbracelet/gum/releases/tag/v0.17.0)
+on the server running setup, not on the laptop displaying an SSH session. It
+reuses an installed matching version, or downloads the OS/architecture-specific
+binary temporarily and verifies a pinned SHA-256 before extracting or running
+it. No Homebrew or apt installation is needed for the UI. The temporary copy is
+removed on exit; a subsequent run downloads it again unless a matching Gum is
+already installed. If preparation fails, interactive setup stops before
+provisioning. **There is no numbered menu.**
+
+## Choose what runs
+
+| Choice | macOS | Debian/Ubuntu | Default if missing |
+| --- | --- | --- | --- |
+| Tailscale, Mosh, tmux, Git, GitHub CLI | Homebrew (existing Apple Git also kept) | apt / official upstream installer or repository | Selected |
+| Codex, Claude Code | Official native installers | Same native installers | Selected |
+| Node.js / nvm, Bun | Official installers | Same installers | Off |
+| Session shortcut `t`, shell integration | Shared managed bash/zsh configuration | Same configuration | Selected |
+| Security baseline | Not offered | Guarded SSH hardening, ufw, fail2ban, automatic security updates | Selected |
+| Disk guard | Not offered | Journal cap and disk timer; Docker cache cleanup at threshold | Selected |
+| Actions runner, PostgreSQL | Not offered | Dedicated runner service / local database service | Off |
+
+Homebrew is a conditional dependency, installed only for a selected missing
+formula. A selected shortcut adds missing tmux; selected tools add shell
+integration. On Linux, missing `curl` is added only for selected network
+installers (including the runner); Bun also adds missing `unzip`. These apt
+dependencies appear in the review plan and install before dependent tools.
+Existing Tailscale
+installations and credentials are preserved. No client connectivity tests run.
+
+On Linux, security and disk guard are **configuration reconciliation** choices:
+they remain selectable so changed settings can be applied; their modules compare
+managed files before writing. They run before third-party tool installers when
+selected. Active ufw rules are preserved. SSH password authentication is disabled
+only when an authorized key is found for the invoking account. Set `SSH_PORT`
+before setup if it is not 22. Review the firewall plan for your server's needs.
+
+Disk guard caps the journal at 200 MB, checks every 10 minutes, warns at 80%,
+and prunes Docker build cache and dangling images at 90%. Override thresholds
+with `DISK_GUARD_WARN_PCT` / `DISK_GUARD_CLEAN_PCT`.
+
+Runner installation requires `GH_RUNNER_REPO=owner/repo` plus an authenticated
+GitHub CLI or `GH_RUNNER_TOKEN`. Use it only for trusted repositories: workflows
+execute code on the server. `DEV_POSTGRES=1` preselects PostgreSQL; it uses local
+Unix sockets and peer authentication with a superuser role for the invoking
+account. Both choices remain subject to the same review and installed-item locks.
+
+## Preview or automate
+
+Pass options through the same bootstrap command on either OS:
 
 ```bash
-sudo /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --check
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select mosh,tmux,shortcut --dry-run
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select mosh,tmux,shortcut --yes
 ```
 
-Both commands download setup into a temporary directory and clean it up on exit.
-No clone or pull is needed. Rerun the same command to fill in missing tools.
-Open a new terminal or SSH session afterward to load shell changes.
+`--check` inventories local state; `--dry-run` prints a plan. Neither writes
+configuration or installs software. `--yes` requires an explicit `--select`
+list (`none` is valid). All three modes skip Gum. IDs are
+`tailscale,mosh,tmux,git,gh,codex,claude,node,bun,shortcut,shell`, plus Linux-only
+`security,disk-guard,runner,postgres`.
 
-See the [Mac guide](macos/README.md) for details and preview commands.
+Reruns redetect tools before applying saved choices and recheck before installing.
+Working tools cannot be selected for reinstall; deselection never uninstalls.
+Managed shell files are compared, original files backed up once, and custom lines
+preserved. Symlinked profiles needing changes require manual integration.
+Failures exit nonzero; fix the reported issue and rerun. Linux installation output
+is saved to `~/vps-setup.log` (override with `LOGFILE`). Configuration reconciliation
+may enable stopped services; this is not an assurance that services never change.
 
-## Tools installed on Linux
+## After setup
 
-Each command is taken from the tool's official documentation.
+Open a new shell. Sign in to selected tools when needed (`sudo tailscale up`,
+`gh auth login`, `claude`, `codex`). On macOS, Remote Login, Screen Sharing,
+power settings and Tailscale service startup stay manual: see the
+[Mac mini guide](macos/README.md) and [visual walkthrough](macos/design.html).
 
-| Tool | Role in the AI workflow | Install method |
-|------|-------------------------|----------------|
-| Claude Code | AI coding agent | `curl -fsSL https://claude.ai/install.sh \| bash` |
-| Codex CLI | AI coding agent | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` |
-| nvm | Manages the Node runtime | `nvm-sh` versioned `install.sh` (pinned `v0.40.8`) |
-| Node.js (LTS) | JS/TS runtime the agents run on | `nvm install --latest-npm 'lts/*'` |
-| Bun | Fast JS/TS runtime & package manager | `curl -fsSL https://bun.com/install \| bash` |
-| gh (GitHub CLI) | Drive GitHub (PRs, issues, repos) from CLI | `cli.github.com` signed apt repo |
-| tmux | Keeps agent sessions alive after disconnects | `apt` |
-| mosh | Resilient SSH over flaky links | `apt` |
-| Tailscale | Private, secure remote access | `curl -fsSL https://tailscale.com/install.sh \| sh` |
-| ufw | Firewall (see Baseline security) | `apt` |
-| git / curl / unzip | Version control + installer plumbing | `apt` |
+`t task-name` creates or resumes a tmux session in `~/workspace` (override with
+`WORKSPACE_DIR`). **Ctrl-b, then d** detaches; **Ctrl-b, then s** switches sessions.
+Live sessions survive terminal disconnects, but not a server reboot.
 
-## Linux baseline security
+## Modular design
 
-Firewall, fail2ban, and auto-updates run *before* the network-heavy third-party
-installers, so a transient CDN failure can't leave the box unhardened. These are
-pure-win with no lockout risk, so they always run:
+Both operating systems run `setup.sh` → `lib/setup.sh`:
 
-- **ufw firewall** — default-deny inbound. SSH, mosh, and `tailscale0` are
-  allowed *before* the firewall is enabled, so it can't lock you out. (Set
-  `SSH_PORT` if SSH isn't on 22.) Configured only on first setup — if `ufw` is
-  already active the module skips, preserving any hand-made rules.
-- **fail2ban** — bans an IP for 24h after 3 failed SSH logins in an hour.
-- **SSH hardening** — disables password and root-password logins. **Guarded:**
-  only flips on if an authorized SSH key already exists for your account; on a
-  password-only box it skips and warns rather than risk locking you out.
-- **unattended-upgrades** — security patches install automatically.
+| File | Responsibility |
+| --- | --- |
+| `bootstrap.sh` | Download repository temporarily and forward options |
+| `lib/setup.sh` | Shared inventory → selection → plan → apply → summary |
+| `lib/onboarding.sh` | Registry, eligibility, dependencies and managed shell configuration |
+| `lib/onboarding-ui.sh` | Shared Gum checklists and locked-item presentation |
+| `lib/terminal-ui.sh` | Pinned Gum bootstrap, verification and cleanup |
+| `macos/platform.sh` | Apple tool detection and conditional Homebrew installation |
+| `linux/platform.sh` | apt detection, selected package installation and Linux module dispatch |
+| `modules/*.sh` | Existing focused installers and system configuration modules |
 
-## Project structure
+Add shared choices to the shared registry/engine; keep platform-specific work in
+an adapter. Merely adding a numbered module file does not execute it automatically.
+Native agent/runtime installers and the tmux helper are reused by both platforms.
 
-A thin orchestrator sources shared helpers, then runs each module in `modules/`
-in filename order. To change one concern, edit one file; to add a step, drop a
-numbered file into `modules/`.
-
-```
-bootstrap.sh          # one-command remote installer
-setup.sh              # orchestrator: sources lib, loops over modules/, logs output
-macos/
-  setup.sh            # interactive selection and selected provisioning
-  lib.sh              # local inventory, plans and configuration helpers
-  design.html         # interactive installation walkthrough and official sources
-  README.md           # Mac mini installation and manual checklist
-lib/
-  common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
-modules/
-  10-apt-tools.sh     # git, curl, unzip, tmux, mosh, ufw
-  15-ssh-hardening.sh # key-only SSH (guarded: skips if no key is present)
-  20-firewall.sh      # ufw (default-deny; SSH/mosh/tailscale allowed first)
-  25-fail2ban.sh      # fail2ban sshd jail
-  30-auto-updates.sh  # unattended-upgrades
-  35-disk-guard.sh    # journal cap + disk-usage warning timer
-  40-gh.sh            # GitHub CLI (signed apt repo)
-  50-tailscale.sh     # Tailscale
-  60-node-bun.sh      # nvm + Node.js (LTS) + Bun
-  70-agents.sh        # Claude Code + Codex CLI
-  80-tmux.sh          # `t` shortcut for per-task tmux sessions (in $WORKSPACE_DIR)
-  85-gh-runner.sh     # GitHub Actions self-hosted runner (opt-in: GH_RUNNER_REPO=owner/repo)
-  90-postgres.sh      # shared local PostgreSQL (opt-in: DEV_POSTGRES=1)
-```
-
-On Linux, optional tool installers (Claude, Codex, Bun) soft-fail with a warning rather
-than aborting the run. All output is appended to a logfile (`~/vps-setup.log` by
-default, override with `LOGFILE=...`).
-
-**Idempotent:** every module skips a tool that already exists, and config files
-are only rewritten when their content differs — so a re-run on an already-set-up
-box changes nothing and restarts no services. Re-run any time to fill in
-whatever's missing.
-
-## Disk guard (Linux)
-
-A full root disk takes sshd, journald and tmux down with it, and parallel agents
-building in separate worktrees get there fast. `35-disk-guard.sh` caps the
-journal at 200M and installs `disk-guard.timer`, which checks `/` every 10
-minutes:
-
-- at **80%** it logs a warning (`journalctl -t disk-guard`) and flashes it on every
-  attached tmux client, at most once an hour;
-- at **90%** it also prunes the Docker build cache and dangling images.
-
-It deletes nothing else — build outputs and volumes may belong to a running
-session. Change the thresholds with `DISK_GUARD_WARN_PCT` / `DISK_GUARD_CLEAN_PCT`
-when running setup.
-
-## Shared PostgreSQL (Linux)
-
-Run the bootstrap with `DEV_POSTGRES=1` after `sudo` to install the distro's
-PostgreSQL as one server that
-every project and worktree shares, instead of a database container each. It
-listens on its Unix socket only, and your login user gets a superuser role of the
-same name through peer authentication, so there is no password anywhere:
-
-```
-psql postgres
-postgresql://$USER@%2Fvar%2Frun%2Fpostgresql/postgres   # as a URL
-```
-
-## Manual steps after running
-
-These need interactive auth and aren't automated:
-
-- `sudo tailscale up` — authenticate the node to your tailnet
-- `gh auth login` — log in to GitHub
-- `claude` — sign in to Claude Code on first run
-- `codex` — sign in with ChatGPT
-
-## Session workflow
-
-`80-tmux.sh` sets up one named **tmux** session per task, each rooted at your
-repo directory (`$WORKSPACE_DIR`, default `~/workspace`) — no extra tools, just
-tmux:
-
-- **New / resume a task:** `t <task>` — a shell shortcut that attaches the
-  session if it exists or creates it in `$WORKSPACE_DIR` (bare `t` uses `main`).
-- **Switch tasks:** `prefix + s` (tmux's built-in session picker).
-
-Point it at a different directory by setting `WORKSPACE_DIR` when you run setup
-(on Linux, add `WORKSPACE_DIR=/srv/code` after `sudo` in the bootstrap command).
-Re-running with a new value
-refreshes the `t` shortcut in place. `detach-on-destroy` is left at the tmux
-default, so finishing a task detaches you — handy when each task lives in its own
-cmux tab that you just close when done. Pair it with a cmux custom command that
-lands you on the box in one keypress:
-
-```
-cmux ssh clouddesk -- tmux new-session -A -s main -c "$HOME/workspace"
-```
-
-## Customizing Linux setup
-
-- **Run as non-root with `sudo`**, not as root directly — user-level tools (nvm,
-  Bun, claude, codex) install for `$SUDO_USER`, and `source ~/.bashrc` loads
-  their PATH for that user.
-- **Pass env vars after `sudo`** (sudo scrubs the environment), e.g. set a
-  non-standard SSH port:
-  ```bash
-  sudo SSH_PORT=2222 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
-  ```
-- Pin a different nvm release with `NVM_VERSION=v0.40.x`.
-- Set where the `t` shortcut opens sessions with `WORKSPACE_DIR=/path` (default
-  `~/workspace`). Create the directory before invoking `t`; tmux needs it to exist.
-- Install from a fork/branch with `VPS_SETUP_REPO` / `VPS_SETUP_REF` (defaults
-  to this repo's `main`).
-- Add or remove base apt tools via the `APT_PKGS` array in
-  `modules/10-apt-tools.sh`.
-
+CI runs isolated installer tests and real Gum keyboard tests on Linux and macOS
+(Apple Bash 3.2), shell lint, and fresh Ubuntu apt regression tests. The behavior
+tests fake provisioning commands; they do not provision a physical Mac or VPS.

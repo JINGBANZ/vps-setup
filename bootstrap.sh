@@ -4,20 +4,16 @@
 #
 # Lets a fresh box run the whole setup without cloning by hand:
 #
-#   curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh | sudo bash
+#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
 #
-# macOS: run as your normal user WITHOUT sudo; prefer downloading this script
-# first and running it from Terminal so Homebrew can prompt. See macos/README.md.
+# Both platforms: run as your normal user; Linux system modules request sudo.
 #
 # It downloads the repo (tarball, with a git fallback) into a temp dir and runs
 # setup.sh from it. setup.sh and its modules are the real logic; this file just
 # fetches them — the same "tiny bootstrap loader" pattern the Claude/rustup
 # installers use.
 #
-# Env vars are forwarded to setup.sh, but sudo scrubs the environment by
-# default, so set them *after* sudo:
-#
-#   curl -fsSL .../bootstrap.sh | sudo SSH_PORT=2222 bash
+# Environment variables and command-line options are forwarded to setup.sh.
 #
 # The whole body lives in a function called on the last line: if the connection
 # drops mid-download, a partial file defines the function but never runs it,
@@ -62,8 +58,7 @@ main() {
   fi
 
   echo "==> Running setup.sh"
-  # Linux may run under sudo; macOS must run as the normal user. setup.sh
-  # dispatches to the right platform. Caller environment flows through unchanged.
+  # Both platforms use the shared onboarding engine.
   bash "$tmp/setup.sh" "$@"
 }
 
