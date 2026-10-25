@@ -76,7 +76,8 @@ class ShellStartup(unittest.TestCase):
         env = {'HOME': str(self.home), 'ZDOTDIR': str(self.home), 'PATH': '/usr/bin:/bin',
                'TERM': 'xterm-256color', 'LC_ALL': 'C', 'TEST_STATE': str(self.f.state)}
         env.update(overrides)
-        return subprocess.run([shutil.which(executable_name), flags, command], env=env,
+        binary = '/bin/bash' if executable_name == 'bash' else shutil.which(executable_name)
+        return subprocess.run([binary, flags, command], env=env,
                               cwd=self.home, capture_output=True, text=True, timeout=30)
 
     def assert_runtime(self, result):
@@ -103,6 +104,12 @@ class ShellStartup(unittest.TestCase):
         # global BASH_ENV setting that would affect unrelated scripts.
         self.assert_runtime(self.shell('bash', '-c', self.runtime_command(),
                                       BASH_ENV=str(self.f.config / 'env.sh')))
+
+    @unittest.skipIf(os.geteuid() == 0, 'Root harness: real SSH CI covers non-root login shells')
+    def test_bash_login_modes(self):
+        for flags in ['-lc', '-lic']:
+            with self.subTest(flags=flags):
+                self.assert_runtime(self.shell('bash', flags, self.runtime_command()))
 
     def test_bash_guard_and_rerun_preserve_custom_content(self):
         self.assert_runtime(self.shell('bash', '-c',
