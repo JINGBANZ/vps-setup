@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Helpers for macOS; sourcing this file performs no actions.
-COMPONENTS=(tailscale ssh mosh tmux shortcut git gh codex claude node bun screen power)
-LABELS=('Tailscale' 'Remote Login guide' 'Mosh' 'tmux' 'Session shortcut: t' 'Git' 'GitHub CLI' 'Codex' 'Claude Code' 'Node.js / nvm' 'Bun' 'Screen Sharing guide' 'Always-on power settings')
+COMPONENTS=(tailscale ssh mosh tmux shortcut git gh codex claude node bun screen)
+LABELS=('Tailscale' 'Remote Login guide' 'Mosh' 'tmux' 'Session shortcut: t' 'Git' 'GitHub CLI' 'Codex' 'Claude Code' 'Node.js / nvm' 'Bun' 'Screen Sharing guide')
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 mac_usage() {
   cat <<'EOF'
@@ -13,7 +13,7 @@ Usage on macOS: bash setup.sh [options]  (run WITHOUT sudo)
   --yes               Apply an explicit --select list without menu confirmation.
   --help              Show this help.
 Components:
-  tailscale,ssh,mosh,tmux,shortcut,git,gh,codex,claude,node,bun,screen,power
+  tailscale,ssh,mosh,tmux,shortcut,git,gh,codex,claude,node,bun,screen
 Node and Bun default off. SSH and Screen Sharing are guided macOS settings.
 Deselecting means skip; existing software and settings are kept.
 Examples:
@@ -30,6 +30,7 @@ mac_parse_selection() {
   [ "$value" != none ] || return 0
   [ -n "$value" ] || die 'Empty selection; use none explicitly'
   for id in ${value//,/ }; do
+    [ "$id" != power ] || die 'power was removed; configure power manually in System Settings'
     known=0
     for item in "${COMPONENTS[@]}"; do [ "$id" != "$item" ] || known=1; done
     [ "$known" = 1 ] || die "Unknown component: $id"
@@ -94,13 +95,6 @@ mac_detect_tailscale() {
     TS_AUTH="$("$TS_BIN" status --json 2>/dev/null | plutil -extract BackendState raw -o - - 2>/dev/null)" || TS_AUTH=unknown
   fi
 }
-mac_power_value() {
-  pmset -g custom | awk -v key="$1" '
-    /^AC Power:/ { ac=1; next }
-    /^[^[:space:]]/ { ac=0 }
-    ac && $1 == key { print $2; exit }
-  '
-}
 mac_status() {
   local id="$1" bin version label flag=--version
   case "$id" in
@@ -110,7 +104,6 @@ mac_status() {
       [ "$id" != screen ] || label=com.apple.screensharing
       if launchctl print "system/$label" >/dev/null 2>&1; then printf 'Service loaded; verify allowed users'
       else printf 'Built in; check Sharing settings'; fi ;;
-    power) printf 'AC sleep=%s; autorestart=%s' "$(mac_power_value sleep)" "$(mac_power_value autorestart)" ;;
     shortcut)
       if [ -f "$CONFIG_DIR/tmux.sh" ]; then printf 'Managed shortcut present'
       else printf 'Not configured'; fi ;;
@@ -156,7 +149,6 @@ mac_plan() {
           *) printf '  tailscale: reuse %s installation; manual startup review (no migration)\n' "$TS_KIND" ;;
         esac ;;
       ssh|screen) printf '  %s: show macOS Sharing / allowed-user instructions\n' "$id" ;;
-      power) printf '  power: set AC sleep=0 and supported autorestart=1 only if different\n' ;;
       shortcut) printf '  shortcut: create workspace; compare/update managed t() helper\n' ;;
       *)
         if mac_tool "$id" >/dev/null; then printf '  %s: reuse existing tool (no upgrade)\n' "$id"
@@ -212,24 +204,6 @@ mac_backup_profiles() {
     if [ -f "$profile" ] && [ ! -e "$profile.vps-setup.bak" ]; then
       cp -p "$profile" "$profile.vps-setup.bak"
     fi
-  done
-}
-mac_power() {
-  local key wanted cap backup
-  cap="$(pmset -g cap)"
-  for key in sleep autorestart; do
-    wanted=0
-    if [ "$key" = autorestart ]; then
-      wanted=1
-      if ! printf '%s\n' "$cap" | grep -Eq '^[[:space:]]*autorestart[[:space:]]*$'; then
-        warn 'Automatic power-on is not exposed by pmset; check System Settings > Energy.'; continue
-      fi
-    fi
-    if [ "$(mac_power_value "$key")" = "$wanted" ]; then continue; fi
-    backup="$CONFIG_DIR/power-settings-before.txt"
-    if [ ! -e "$backup" ]; then (umask 077; pmset -g custom > "$backup"); fi
-    sudo pmset -c "$key" "$wanted"
-    [ "$(mac_power_value "$key")" = "$wanted" ] || die "Power setting $key did not apply"
   done
 }
 mac_shell_config() {
@@ -298,6 +272,7 @@ mac_finish() {
   if mac_selected mosh; then printf 'Install Mosh on the laptop too; SSH authenticates, then Mosh uses UDP.\n'; fi
   if mac_selected shortcut; then printf 'On the mini: t my-task, then run your agent. Ctrl-b, d detaches.\n'; fi
   printf 'tmux survives disconnects, not Mac reboots. Display sleep is fine; system sleep suspends work.\n'
+  printf 'Power settings are manual: System Settings > Energy; review automatic sleep and restart after power failure.\n'
   printf 'Test external access and reboot recovery. FileVault unlock may need an independent network path.\n'
   printf 'See macos/README.md for firewall rules, recovery and verification.\n'
 }

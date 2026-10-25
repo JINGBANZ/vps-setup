@@ -64,24 +64,8 @@ esac
 EOF
 cat > "$stub_bin/pmset" <<'EOF'
 #!/usr/bin/env bash
-set -eu
-if [ "$1 $2" = '-g custom' ]; then
-  echo 'Battery Power:'
-  echo ' sleep 7'
-  echo 'AC Power:'
-  printf ' sleep %s\n' "$(cat "$TEST_STATE/sleep" 2>/dev/null || echo 1)"
-  printf ' autorestart %s\n' "$(cat "$TEST_STATE/autorestart" 2>/dev/null || echo 0)"
-elif [ "$1 $2" = '-g cap' ]; then
-  echo 'Capabilities for AC Power:'
-  echo ' sleep'
-  [ "${TEST_NO_AUTORESTART:-0}" = 1 ] || echo ' autorestart'
-elif [ "$1" = -c ]; then
-  [ "${STUB_PRIVILEGED:-0}" = 1 ] || exit 92
-  printf 'power %s %s\n' "$2" "$3" >> "$TEST_STATE/calls"
-  echo "$3" > "$TEST_STATE/$2"
-else
-  exit 91
-fi
+printf '%s\n' "$*" >> "$TEST_STATE/pmset-called"
+exit 92
 EOF
 cat > "$stub_bin/tmux" <<'EOF'
 #!/usr/bin/env bash
@@ -114,20 +98,17 @@ run_setup() {
     NVM_DIR="$test_home/.nvm" XDG_CONFIG_HOME= ZDOTDIR="$test_home" \
     WORKSPACE_DIR="$test_home/dev \$(touch SHOULD_NOT_EXIST)" SUDO_USER= \
     GH_RUNNER_REPO= DEV_POSTGRES=0 \
-    LOGFILE="$state/setup.log" "$@" /bin/bash "$REPO_ROOT/setup.sh" --select "${TEST_SELECT:-tailscale,ssh,mosh,tmux,shortcut,git,gh,codex,claude,screen,power}" --yes \
+    LOGFILE="$state/setup.log" "$@" /bin/bash "$REPO_ROOT/setup.sh" --select "${TEST_SELECT:-tailscale,ssh,mosh,tmux,shortcut,git,gh,codex,claude,screen}" --yes \
     > "$state/output" 2>&1
 }
 
 run_setup || { cat "$state/output"; fail 'fresh Mac setup'; }
 [ ! -f "$state/forbidden" ] || fail 'macOS ran Linux tools or a network installer'
 [ -f "$state/service" ] || fail 'Tailscale was not started as a system service'
-[ "$(cat "$state/sleep")" = 0 ] || fail 'AC sleep not disabled'
-[ "$(cat "$state/autorestart")" = 1 ] || fail 'power recovery not enabled'
 [ -d "$test_home/dev \$(touch SHOULD_NOT_EXIST)" ] || fail 'workspace not created'
 [ ! -f "$test_home/.bash_profile" ] || fail 'existing .profile was shadowed'
 grep -qx '# existing customization' "$test_home/.zshrc" || fail 'zsh customization lost'
 grep -qx '# existing bash login profile' "$test_home/.profile" || fail 'bash customization lost'
-grep -q 'sleep 1' "$test_home/.config/vps-setup/power-settings-before.txt" || fail 'no power backup'
 /bin/bash -n "$test_home/.config/vps-setup/tmux.sh" || fail 'generated tmux syntax'
 if grep -qx EOF "$test_home/.config/vps-setup/tmux.sh"; then
   fail 'heredoc delimiter leaked into generated shell code'
@@ -177,7 +158,7 @@ if command -v zsh >/dev/null 2>&1; then
     || fail 'generated zsh shortcut'
 fi
 
-for reason in TEST_UID=0 MAC_ALWAYS_ON=invalid MAC_TAILSCALE=invalid \
+for reason in TEST_UID=0 MAC_TAILSCALE=invalid \
   WORKSPACE_DIR=relative GH_RUNNER_REPO=owner/repo DEV_POSTGRES=1 TEST_OS=FreeBSD; do
   if run_setup "$reason"; then fail "expected rejection for $reason"; fi
 done
@@ -190,8 +171,6 @@ if grep -Eq '^sudo |^brew (install --formula tailscale|services)' "$state/calls"
   fail 'opt-outs still changed privileged settings or Tailscale'
 fi
 rm -rf "$test_home/Applications/Tailscale.app"
-run_setup TEST_NO_AUTORESTART=1 || fail 'Mac without autorestart capability'
-grep -q 'Automatic power-on is not exposed' "$state/output" || fail 'missing capability warning'
 
 run_args() {
   env HOME="$test_home" PATH="$stub_bin:$PATH" TEST_STATE="$state" \
@@ -211,6 +190,24 @@ if run_args --select postgres --yes; then fail 'unsupported Mac component'; fi
 if run_args --yes; then fail 'implicit unattended defaults'; fi
 run_args --select none --yes || fail 'empty explicit selection'
 [ "$(snapshot)" = "$before" ] || fail 'select none modified configuration'
+
+# Old saved power choices are retired without preventing reruns or changing power.
+cp "$test_home/.config/vps-setup/selection.txt" "$state/selection-original"
+printf '%s\n' 'power,tmux' > "$test_home/.config/vps-setup/selection.txt"
+run_args --dry-run || fail 'saved power choice migration'
+grep -q 'Ignoring saved power choice' "$state/output" || fail 'migration notice missing'
+grep -q 'tmux: reuse' "$state/output" || fail 'other saved choice lost'
+grep -qx 'power,tmux' "$test_home/.config/vps-setup/selection.txt" || fail 'dry run rewrote saved choices'
+printf '%s\n' power > "$test_home/.config/vps-setup/selection.txt"
+run_args --dry-run || fail 'power-only saved choice'
+printf '%s\n' 'power,not-a-component' > "$test_home/.config/vps-setup/selection.txt"
+if run_args --dry-run; then fail 'migration accepted unknown saved choice'; fi
+cp "$state/selection-original" "$test_home/.config/vps-setup/selection.txt"
+if run_args --select power --yes; then fail 'explicit power selection accepted'; fi
+grep -q 'power was removed' "$state/output" || fail 'missing removed-component guidance'
+run_setup MAC_ALWAYS_ON=1 || fail 'legacy always-on variable'
+[ ! -f "$state/pmset-called" ] || fail 'setup invoked pmset'
+[ ! -e "$test_home/.config/vps-setup/power-settings-before.txt" ] || fail 'power backup created'
 
 # Existing GUI and user daemons are reused; an incompatible second service is not installed.
 rm -f "$state/service"
@@ -335,4 +332,6 @@ run_args --check || fail 'connected inventory'
 grep -q 'Screen Sharing address: 100.101.102.103' "$state/output" || fail 'assigned address not reported'
 if grep -q SecretTestMarker "$state/output"; then fail 'raw Tailscale status leaked'; fi
 
+[ ! -f "$state/pmset-called" ] || fail 'a setup path invoked pmset'
+echo 'PASS: power remains manual, including legacy selections and environment'
 echo 'PASS: Mac onboarding, selections, read-only plans, retries, reruns, shell preservation and service reuse'
