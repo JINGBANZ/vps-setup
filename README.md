@@ -12,24 +12,38 @@ for installation choices and the manual server checklist.
 
 ### Mac mini
 
-Run in Terminal as your normal administrator account, **without sudo**:
+Run this **on your Mac mini**, in Terminal or an interactive SSH session, as
+your normal administrator account **without sudo**:
 
 ```bash
-# On a fresh Mac, install Command Line Tools first and wait for it to finish:
-xcode-select --install
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
+```
 
+No manual clone or pull is needed. The bootstrap downloads the latest `main`
+into a temporary directory, opens interactive onboarding, and removes that
+directory when it exits. This command keeps terminal input available for the
+menu and Homebrew prompts. Rerun the same command later to install missing tools.
+
+Installed tools, including your existing Tailscale, stay locked and unchanged.
+Toggle numbers for missing tools or configuration updates, press **Enter** to
+review the plan, then type **`apply`** to proceed. Node.js and Bun default off.
+
+Homebrew is installed only when a selected missing formula needs it; its initial
+installer may request your administrator password. If Command Line Tools are
+missing, run `xcode-select --install`, finish Apple's installer, then rerun the
+command above. Open a new terminal or SSH session after shell configuration.
+
+Sharing, power settings and sign-in stay manual; setup performs no connection
+tests. See the [Mac guide](macos/README.md#start) for no-clone inventory and dry-run
+commands, or the [interactive walkthrough](macos/design.html) for the menu.
+
+Prefer a local checkout?
+
+```bash
 git clone https://github.com/JINGBANZ/vps-setup.git
 cd vps-setup
 bash setup.sh
 ```
-
-The Mac onboarding locks installed tools and lets you select missing tools or
-configuration updates. Node.js and Bun default off. Homebrew is an automatic
-dependency only when a selected missing formula needs it; its initial installer
-may request sudo. Use `bash setup.sh --check` for a local inventory or `--dry-run`
-for a plan. Existing Tailscale installations and services are preserved. Sharing,
-power settings and sign-in stay manual; setup performs no connection tests.
-See the [Mac guide](macos/README.md) and [interactive walkthrough](macos/design.html).
 
 ### Debian/Ubuntu VPS
 

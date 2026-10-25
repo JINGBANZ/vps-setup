@@ -7,24 +7,54 @@ Your existing Tailscale installation is kept, including its service state.
 
 ## Start
 
-Finish Apple's Command Line Tools installer before installing Homebrew packages:
+Run this **on your Mac mini**, in Terminal or an interactive SSH session,
+**without sudo**:
 
 ```bash
-xcode-select --install
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
+```
 
+The bootstrap downloads the latest `main` into a temporary directory, runs
+interactive onboarding, then removes that directory on exit. No permanent
+repository checkout or manual pull is needed. Using `bash -c` keeps terminal
+input available for onboarding and Homebrew prompts.
+
+Installed tools, including existing Tailscale, stay locked and unchanged. Toggle
+eligible numbers, press **Enter** to review, then type **`apply`** to proceed.
+Rerun the same command later to install missing tools. After shell configuration,
+open a new terminal or SSH session to load it.
+
+Homebrew is added only when a selected missing formula needs it. Its initial
+installer may request your administrator password. If Command Line Tools are
+missing, run `xcode-select --install`, finish Apple's installer, then rerun setup.
+Skip that step if the tools are already installed. Use a macOS version supported
+by [Homebrew](https://docs.brew.sh/Installation).
+
+For a local inventory or a plan without installing anything, pass flags after
+`--` (the placeholder for Bash's `$0`, so later arguments reach the bootstrap):
+
+```bash
+# Local inventory only; still downloads setup into a temporary directory.
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --check
+
+# Preview selected work.
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select mosh,tmux,codex --dry-run
+```
+
+### Optional local checkout
+
+If you prefer keeping the scripts locally:
+
+```bash
 git clone https://github.com/JINGBANZ/vps-setup.git
 cd vps-setup
 bash setup.sh
-```
 
-Use a macOS version supported by [Homebrew](https://docs.brew.sh/Installation).
-If Command Line Tools are already installed, skip that first command.
-
-```bash
-bash setup.sh --check                         # local inventory only
+# These commands run from the checkout:
+bash setup.sh --check
 bash setup.sh --select mosh,tmux,codex --dry-run
 bash setup.sh --select mosh,tmux,shortcut,codex,claude --yes
-bash setup.sh --select none --yes             # no changes
+bash setup.sh --select none --yes
 ```
 
 `--yes` requires an explicit list and skips this script's confirmation. An upstream
