@@ -44,6 +44,14 @@ esac''')
         self.bashenv = self.base / 'bashenv'
         self.bashenv.write_text('''command() {
  if [ "${1:-}" = -v ]; then
+   if [ "${2:-}" = node ] && [ "${TEST_NVM_GLOB:-0}" = 1 ]; then
+     local node_path
+     node_path="$(builtin command -v node || true)"
+     case "$node_path" in
+       "$NVM_DIR"/versions/node/*/bin/node) printf '%s\\n' "$node_path"; return 0 ;;
+       *) return 1 ;;
+     esac
+   fi
    case "${2:-}" in
      tailscale|tailscaled|mosh|tmux|git|gh|codex|claude|node|bun)
        [ -f "$TEST_STATE/tool-$2" ] || [ -f "$TEST_STATE/broken-$2" ] || return 1 ;;
@@ -67,6 +75,10 @@ case "$*" in
  *bun.com/install*) echo 'touch "$TEST_STATE/tool-bun"' ;;
  *nvm-sh/nvm*) cat <<'EOF'
 mkdir -p "$NVM_DIR"
+if [ "${TEST_NVM_GLOB:-0}" = 1 ]; then
+  cp "$TEST_STATE/nvm-fixture.sh" "$NVM_DIR/nvm.sh"
+  exit 0
+fi
 cat > "$NVM_DIR/nvm.sh" <<'NVM'
 nvm() {
   printf 'nvm %s\\n' "$*" >> "$TEST_STATE/calls"
@@ -249,6 +261,69 @@ mac_ensure_brew
         self.assertIn('nvm-sh/nvm/v0.40.8/install.sh', self.calls())
         self.assertNotIn('bun.com', self.calls())
         self.assertTrue((self.state / 'tool-node').exists())
+
+    def nvm_glob_fixture(self, existing=False):
+        # Model nvm's glob-based version discovery, with Node absent from PATH.
+        fixture = self.state / 'nvm-fixture.sh'
+        fixture.write_text('''nvm() {
+  case "$1" in
+    install)
+      mkdir -p "$NVM_DIR/versions/node/v24.0.0/bin"
+      cp "$TEST_STATE/node-template" "$NVM_DIR/versions/node/v24.0.0/bin/node"
+      nvm use default ;;
+    use)
+      local node_bin
+      for node_bin in "$NVM_DIR"/versions/node/v*/bin; do
+        [ -x "$node_bin/node" ] || continue
+        export PATH="$node_bin:$PATH"
+        return 0
+      done
+      return 3 ;;
+    alias) return 0 ;;
+  esac
+}
+''')
+        shutil.copy2(self.bin / 'node', self.state / 'node-template')
+        (self.bin / 'node').unlink()
+        if existing:
+            nvm_dir = Path(self.env['NVM_DIR'])
+            node_bin = nvm_dir / 'versions/node/v24.0.0/bin'
+            node_bin.mkdir(parents=True)
+            shutil.copy2(self.state / 'node-template', node_bin / 'node')
+            shutil.copy2(fixture, nvm_dir / 'nvm.sh')
+
+    def test_nvm_existing_node_outside_path_is_locked(self):
+        self.nvm_glob_fixture(existing=True)
+        before = self.snapshot()
+        out = self.run_setup('--select', 'node', '--yes', TEST_NVM_GLOB='1')
+        self.assertIn('LOCKED Node.js / nvm', out)
+        self.assertNotIn('curl ', self.calls())
+        self.assertEqual(before, self.snapshot())
+
+    def test_nvm_new_node_activated_for_post_install_check(self):
+        self.nvm_glob_fixture()
+        out = self.run_setup('--select', 'node', '--yes', TEST_NVM_GLOB='1')
+        self.assertIn('Installed — local version checked', out)
+        before = self.snapshot()
+        (self.state / 'calls').write_text('')
+        self.run_setup('--select', 'node', '--yes', TEST_NVM_GLOB='1')
+        self.assertNotIn('curl ', self.calls())
+        self.assertEqual(before, self.snapshot())
+
+    def test_selection_patterns_stay_literal(self):
+        # A glob matching a valid component must be rejected, not selected.
+        (self.base / 'node').touch()
+        self.config.mkdir(parents=True)
+        saved = self.config / 'selection.txt'
+        for value in ['n*', 'node\\n[nb]*', '$(touch OWNED)']:
+            saved.write_text(value)
+            for args in [('--dry-run',), ('--select', value, '--dry-run')]:
+                result = subprocess.run(['/bin/bash', str(ROOT / 'setup.sh'), *args],
+                                        cwd=self.base, env=self.env, capture_output=True,
+                                        text=True, timeout=30)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('Unknown component', result.stderr)
+        self.assertFalse((self.base / 'OWNED').exists())
 
     def test_config_update_and_symlink(self):
         self.run_setup('--select', 'shortcut', '--yes')

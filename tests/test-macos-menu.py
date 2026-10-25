@@ -24,7 +24,7 @@ try:
                 break
             output += chunk
         if b"Toggle eligible numbers" in output and not sent:
-            os.write(master, b"all\n1,6\nnone\ndefaults\n\ncancel\n")
+            os.write(master, b"all\n1,6\nnone\ndefaults\n*\n\ncancel\n")
             sent = True
         if proc.poll() is not None:
             # Drain the PTY once more before checking output.
@@ -32,13 +32,13 @@ try:
     proc.wait(timeout=5)
     text = output.decode(errors="replace")
     assert proc.returncode == 0, text
-    for expected in ["tailscale is locked", "codex is locked", "Type apply", "Cancelled; no changes applied"]:
+    for expected in ["tailscale is locked", "codex is locked", "Unknown selection: *", "Type apply", "Cancelled; no changes applied"]:
         assert expected in text, (expected, text)
     for line in text.splitlines():
         if "LOCKED" in line:
             assert "[x]" not in line and "[ ]" not in line, line
     inventories = text.split('Local installation inventory')[1:]
-    assert len(inventories) == 5, text
+    assert len(inventories) == 6, text
     # Initial/defaults leave runtimes off; all enables them; none clears all.
     for index in [0, 4]:
         assert '[ ] Node.js / nvm' in inventories[index], text

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Local server installation only; no authentication or client connection probes.
 set -euo pipefail
-# Saved choices are data: never expand filename patterns or execute their contents.
-set -f
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=macos/lib.sh
 . "$REPO_ROOT/macos/lib.sh"
@@ -33,12 +31,12 @@ case "${MAC_TAILSCALE:-1}" in 0|1) ;; *) die 'MAC_TAILSCALE must be 0 or 1' ;; e
 if [ "$explicit" = 0 ] && [ -f "$CONFIG_DIR/selection.txt" ]; then
   saved_current=''
   saved="$(cat "$CONFIG_DIR/selection.txt")"
-  for saved_id in ${saved//,/ }; do
+  while IFS= read -r saved_id; do
     case "$saved_id" in
       ssh|screen|power) printf 'Retired saved choice %s: now manual.\n' "$saved_id" ;;
       *) saved_current="$saved_current $saved_id" ;;
     esac
-  done
+  done < <(mac_selection_words "$saved")
   mac_parse_selection "${saved_current:-none}"
 fi
 [ "${MAC_TAILSCALE:-1}" = 1 ] || mac_deselect tailscale
@@ -61,7 +59,7 @@ if [ "$dry_run:$assume_yes" = 0:0 ]; then
         all) SELECTED=" ${COMPONENTS[*]} " ;;
         none) SELECTED=' ' ;;
         defaults) SELECTED="$DEFAULTS" ;;
-        *) for token in ${answer//,/ }; do
+        *) while IFS= read -r token; do
           case "$token" in
             1|2|3|4|5|6|7|8|9|10|11)
               index=$((token-1)); item="${COMPONENTS[$index]}"
@@ -70,7 +68,7 @@ if [ "$dry_run:$assume_yes" = 0:0 ]; then
               else mac_select "$item"; fi ;;
             *) printf 'Unknown selection: %s\n' "$token" ;;
           esac
-        done ;;
+        done < <(mac_selection_words "$answer") ;;
       esac
       mac_normalize
       mac_inventory

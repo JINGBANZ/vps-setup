@@ -21,18 +21,24 @@ EOF
 mac_selected() { case "$SELECTED" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 mac_select() { if ! mac_selected "$1"; then SELECTED="$SELECTED$1 "; fi; }
 mac_deselect() { SELECTED="${SELECTED// $1 / }"; }
+mac_selection_words() (
+  # Split plain selection data without expanding patterns. Keep noglob inside
+  # this subshell: nvm needs normal filename expansion to discover versions.
+  set -f
+  for word in ${1//,/ }; do printf '%s\n' "$word"; done
+)
 mac_parse_selection() {
   local id item known
   SELECTED=' '
   [ "$1" != none ] || return 0
   [ -n "$1" ] || die 'Empty selection; use none'
-  for id in ${1//,/ }; do
+  while IFS= read -r id; do
     case "$id" in ssh|screen|power) die "$id is manual; remove it from --select" ;; esac
     known=0
     for item in "${COMPONENTS[@]}"; do [ "$id" != "$item" ] || known=1; done
     [ "$known" = 1 ] || die "Unknown component: $id"
     mac_select "$id"
-  done
+  done < <(mac_selection_words "$1")
 }
 mac_load_nvm() {
   if [ -s "$NVM_DIR/nvm.sh" ]; then
