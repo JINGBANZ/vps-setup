@@ -42,7 +42,8 @@ Unlike PR #27's PATH-only remote hook, this loads nvm when installed in remote
 command shells too. That adds nvm's normal initialization cost. Its initialization
 stdout is suppressed to keep remote protocols clean; errors remain on stderr.
 Repeated sourcing does not reload an already-defined nvm function or reset a
-version selected with `nvm use`.
+version selected with `nvm use`. If macOS login startup reorders PATH, the
+active nvm bin is restored ahead of system Node without duplicate entries.
 
 Existing custom profile text is preserved. The managed Bash hook moves ahead of
 early-return guards; old managed hooks are removed so reruns do not duplicate it.

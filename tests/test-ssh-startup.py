@@ -55,7 +55,13 @@ class SSHStartup(unittest.TestCase):
                 '/bin/bash', str(ROOT / 'setup.sh'), '--select', 'shortcut,shell', '--yes')
         for name in ['host', 'client']:
             run('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(cls.base / name))
-        (cls.base / 'client.pub').chmod(0o644)
+        for user, home in cls.users.values():
+            ssh_dir = home / '.ssh'
+            ssh_dir.mkdir(mode=0o700)
+            authorized = ssh_dir / 'authorized_keys'
+            authorized.write_text((cls.base / 'client.pub').read_text())
+            authorized.chmod(0o600)
+            run('chown', '-R', user + ':' + user, str(ssh_dir))
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0))
             cls.port = s.getsockname()[1]
@@ -66,7 +72,7 @@ class SSHStartup(unittest.TestCase):
 ListenAddress 127.0.0.1
 HostKey {cls.base}/host
 PidFile {cls.base}/sshd.pid
-AuthorizedKeysFile {cls.base}/client.pub
+AuthorizedKeysFile .ssh/authorized_keys
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 AuthenticationMethods publickey
@@ -102,7 +108,10 @@ LogLevel ERROR
                            capture_output=True, check=False)
 
     def remote(self, shell, command):
-        return run(*self.ssh, self.users[shell][0] + '@127.0.0.1', command)
+        try:
+            return run(*self.ssh, self.users[shell][0] + '@127.0.0.1', command)
+        except subprocess.CalledProcessError as exc:
+            self.fail(f'SSH command failed ({exc.returncode}): {exc.stderr}')
 
     def test_remote_tools_and_silent_startup(self):
         for shell in self.users:
@@ -135,7 +144,9 @@ LogLevel ERROR
                         exists = subprocess.run(['runuser', '-u', user, '--', 'tmux',
                                                  'has-session', '-t', '=smoke'], capture_output=True)
                         if exists.returncode == 0: break
-                        if p.poll() is not None: self.fail('SSH shortcut exited before creating tmux session')
+                        if p.poll() is not None:
+                            _, stderr = p.communicate()
+                            self.fail('SSH shortcut exited before creating tmux session: ' + stderr)
                         time.sleep(0.1)
                     else: self.fail('Shortcut did not create a tmux session')
                     r = run('runuser', '-u', user, '--', 'tmux', 'display-message',
@@ -147,7 +158,7 @@ LogLevel ERROR
                 finally:
                     if p.poll() is None:
                         p.terminate()
-                        p.communicate(timeout=10)
+                    p.communicate(timeout=10)
 
 
 if __name__ == '__main__':

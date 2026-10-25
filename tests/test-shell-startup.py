@@ -64,6 +64,7 @@ class ShellStartup(unittest.TestCase):
         executable(self.brew / 'bin/brew',
                    'case "$1" in\n--version) echo brew-test ;;\n'
                    'shellenv) case "${2:-}" in sh|bash) ;; *) exit 91 ;; esac\n'
+                   '[ "$2" != sh ] || [ -z "${BASH_ENV:-}" ] || { echo recursive-bash-env >&2; exit 92; }\n'
                    "printf '%s\\n' " + shlex.quote(exports) + ' ;;\n*) exit 1 ;;\nesac')
         (self.f.bin / 'brew').unlink()
         install_nvm_fixture(self.home)
@@ -165,6 +166,22 @@ class ShellStartup(unittest.TestCase):
         self.assertEqual((r.returncode, r.stdout), (0, '--install\nv22.0.0\n'))
         self.assertEqual((self.home / '.nvm/source-argcount').read_text(), '0\n')
 
+    def test_login_path_reordering_keeps_selected_node(self):
+        system_bin = self.f.base / 'system/bin'
+        executable(system_bin / 'node', 'echo wrong-system-node')
+        profile = self.home / '.zprofile'
+        # Reproduce macOS path_helper ordering on every CI platform.
+        profile.write_text('export PATH=' + shlex.quote(str(system_bin)) + ':"$PATH"\n'
+                           + profile.read_text())
+        r = self.shell('zsh', '-c',
+                       "nvm use --silent v24.0.0; zsh -lc 'node --version; "
+                       "printf \"%s\\n\" \"$PATH\"'")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = r.stdout.splitlines()
+        self.assertEqual(lines[0], 'v24.0.0')
+        self.assertEqual(lines[1].split(':').count(
+            str(self.home / '.nvm/versions/node/v24.0.0/bin')), 1)
+
     @unittest.skipUnless(sys.platform == 'darwin' and shutil.which('brew'),
                          'Real Homebrew smoke check runs on macOS CI')
     def test_real_homebrew_environment(self):
@@ -172,15 +189,17 @@ class ShellStartup(unittest.TestCase):
         prefix = subprocess.check_output([str(brew), '--prefix'], text=True).strip()
         self.f.run_setup('--select', 'shell', '--yes',
                          PATH=str(brew.parent) + ':' + self.f.env['PATH'])
-        r = self.shell('zsh', '-c',
-                       'printf "%s\\n" "$HOMEBREW_PREFIX" "$HOMEBREW_CELLAR" '
-                       '"$HOMEBREW_REPOSITORY"; '
-                       'case ":$PATH:" in *:"$HOMEBREW_PREFIX/sbin":*) echo sbin-ready ;; esac')
-        self.assertEqual(r.returncode, 0, r.stderr)
-        lines = r.stdout.splitlines()
-        self.assertEqual(lines[0], prefix)
-        self.assertTrue(lines[1] and lines[2])
-        self.assertEqual(lines[3], 'sbin-ready')
+        for name in ['zsh', 'bash']:
+            r = self.shell(name, '-c',
+                           'printf "%s\\n" "$HOMEBREW_PREFIX" "$HOMEBREW_CELLAR" '
+                           '"$HOMEBREW_REPOSITORY"; '
+                           'case ":$PATH:" in *:"$HOMEBREW_PREFIX/sbin":*) echo sbin-ready ;; esac',
+                           BASH_ENV=str(self.f.config / 'env.sh'))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            lines = r.stdout.splitlines()
+            self.assertEqual(lines[0], prefix)
+            self.assertTrue(lines[1] and lines[2])
+            self.assertEqual(lines[3], 'sbin-ready')
 
 
 if __name__ == '__main__':

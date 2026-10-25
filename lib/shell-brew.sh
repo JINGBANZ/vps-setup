@@ -12,7 +12,9 @@ else
   done
 fi
 if [ "$_vps_setup_brew_needed" = 1 ] && [ -x "$_vps_setup_brew" ]; then
-  if _vps_setup_brew_env="$("$_vps_setup_brew" shellenv sh)"; then
+  # brew itself starts Bash. Avoid recursively sourcing this file when a batch
+  # job explicitly uses it as BASH_ENV; clear only the child command's hooks.
+  if _vps_setup_brew_env="$(BASH_ENV='' ENV='' "$_vps_setup_brew" shellenv sh)"; then
     eval "$_vps_setup_brew_env"
     _VPS_SETUP_BREW_LOADED="$_vps_setup_brew"
   fi

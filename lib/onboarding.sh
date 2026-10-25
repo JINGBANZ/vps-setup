@@ -243,6 +243,25 @@ if ! typeset -f nvm >/dev/null 2>&1 && [ -s "$NVM_DIR/nvm.sh" ]; then
   _vps_setup_load_nvm
   unset -f _vps_setup_load_nvm
 fi
+# macOS path_helper can reorder PATH between .zshenv and .zprofile. Restore
+# the active nvm bin without reloading nvm, changing versions or duplicating it.
+if [ -n "${NVM_BIN:-}" ] && [ -x "$NVM_BIN/node" ] &&
+   [ "$(command -v node)" != "$NVM_BIN/node" ]; then
+  _vps_setup_path_rest="${PATH:-}"
+  _vps_setup_path_tail=''
+  while :; do
+    _vps_setup_path_part="${_vps_setup_path_rest%%:*}"
+    if [ "$_vps_setup_path_part" != "$NVM_BIN" ]; then
+      _vps_setup_path_tail="$_vps_setup_path_tail:$_vps_setup_path_part"
+    fi
+    case "$_vps_setup_path_rest" in
+      *:*) _vps_setup_path_rest="${_vps_setup_path_rest#*:}" ;;
+      *) break ;;
+    esac
+  done
+  export PATH="$NVM_BIN$_vps_setup_path_tail"
+  unset _vps_setup_path_rest _vps_setup_path_tail _vps_setup_path_part
+fi
 EOF
   fi
   if [ -f "$CONFIG_DIR/tmux.sh" ] || on_selected shortcut; then
