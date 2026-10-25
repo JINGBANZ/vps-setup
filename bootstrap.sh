@@ -37,7 +37,7 @@ trap cleanup EXIT
 main() {
   tmp="$(mktemp -d)"
 
-  echo "==> Fetching $REPO@$REF"
+  echo "Downloading setup ($REPO@$REF)..."
   local tarball="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"
   # Tarball downloads need tar; fall back to git when it's missing rather than
   # piping into a nonexistent tar.
@@ -57,7 +57,6 @@ main() {
     exit 1
   fi
 
-  echo "==> Running setup.sh"
   # Both platforms use the shared onboarding engine.
   bash "$tmp/setup.sh" "$@"
 }

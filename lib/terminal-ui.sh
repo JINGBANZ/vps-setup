@@ -33,7 +33,7 @@ ui_gum_download() {
   local actual member
   ui_gum_asset || return 1
   UI_GUM_TMP="$(mktemp -d)" || return 1
-  printf 'Preparing keyboard menu (Gum %s, temporary download)...\n' "$UI_GUM_VERSION" >&2
+  printf 'Loading menu...\n' >&2
   curl -fsSL --connect-timeout 10 --max-time 60 \
     "https://github.com/charmbracelet/gum/releases/download/v$UI_GUM_VERSION/$UI_GUM_ARCHIVE.tar.gz" \
     -o "$UI_GUM_TMP/gum.tar.gz" || return 1

@@ -46,7 +46,7 @@ else
   if curl -fsSL https://bun.com/install | bash; then
     ok "bun installed"
   else
-    warn "Bun install failed (transient network/CDN?) — skipping; re-run later"
+    warn "Bun install failed; check output above and retry"
   fi
 fi
 fi # INSTALL_BUN

@@ -53,7 +53,7 @@ if [ "$PLATFORM" = macos ] && [ "${MAC_TAILSCALE:-1}" = 0 ]; then on_deselect ta
 case "${VPS_SETUP_UI:-auto}" in auto) ;; *) die 'VPS_SETUP_UI only accepts auto; the numbered menu has been removed' ;; esac
 on_discover
 on_normalize
-if [ "$check_only" = 1 ]; then on_inventory; platform_manual; exit 0; fi
+if [ "$check_only" = 1 ]; then on_inventory; exit 0; fi
 if [ "$dry_run:$assume_yes" = 0:0 ]; then
   if [ -t 0 ]; then exec 3<&0
   elif ( : < /dev/tty ) 2>/dev/null; then exec 3</dev/tty
@@ -68,22 +68,22 @@ if [ "$dry_run:$assume_yes" = 0:0 ]; then
     printf 'Cancelled or menu interrupted; no changes applied.\n'; exit 0
   fi
 else
-  on_inventory
+  on_locked_inventory
 fi
 on_normalize
+if [ "$SELECTED" = ' ' ]; then printf '\nNo changes selected.\n'; exit 0; fi
 on_plan
-if [ "$dry_run" = 1 ]; then platform_manual; exit 0; fi
+if [ "$dry_run" = 1 ]; then exit 0; fi
 if [ "$assume_yes" = 0 ]; then
-  if ! ui_gum confirm 'Apply this plan?' --affirmative Install --negative Cancel --default=false --timeout=0; then
+  if ! ui_gum confirm 'Apply this plan?' --affirmative Apply --negative Cancel --default=false --timeout=0; then
     printf 'Cancelled; no changes applied.\n'; exit 0
   fi
 fi
-if [ "$SELECTED" = ' ' ]; then printf 'No eligible items selected; no changes applied.\n'; on_summary; exit 0; fi
 platform_preflight
 if [ "$PLATFORM" = linux ]; then
   LOGFILE="${LOGFILE:-$HOME/vps-setup.log}"
   exec > >(tee -a "$LOGFILE") 2>&1
-  log "Logging installation output to $LOGFILE"
+  log "Log: $LOGFILE"
 fi
 mkdir -p "$CONFIG_DIR"
 failed=0
@@ -95,8 +95,8 @@ while [ "$i" -lt 9 ]; do
   if on_selected "$item"; then
     on_detect_tool "$item"
     if [ "$DETECTED" != missing ]; then
-      if [ "$DETECTED" = installed ]; then RESULTS[$i]='Already present — kept'
-      else RESULTS[$i]='Failed — detected existing unusable installation; repair manually'; failed=1; fi
+      if [ "$DETECTED" = installed ]; then RESULTS[$i]='Already installed'
+      else RESULTS[$i]='Failed: existing installation needs repair'; failed=1; fi
     else
       success=0
       case "$item" in
@@ -117,9 +117,9 @@ while [ "$i" -lt 9 ]; do
       esac
       hash -r
       if [ "$success" = 1 ] && on_tool "$item" >/dev/null; then
-        RESULTS[$i]='Installed — local version checked'
+        RESULTS[$i]='Installed'
         # Even a new Tailscale installation leaves startup and sign-in manual.
-      else RESULTS[$i]='Failed — installation incomplete; rerun after resolving the error'; failed=1; fi
+      else RESULTS[$i]='Failed: check the installer output and retry'; failed=1; fi
     fi
   fi
   i=$((i+1))
@@ -132,15 +132,15 @@ if on_selected shortcut; then
     on_write "$shortcut_tmp" "$CONFIG_DIR/tmux.sh"
     rm -f "$shortcut_tmp"
     on_config_state shortcut
-    if [ "$DETECTED" = current ]; then RESULTS[9]='Configured — local content checked'
-    else RESULTS[9]='Failed — shortcut configuration incomplete'; failed=1; fi
-  else RESULTS[9]='Failed — tmux dependency unavailable'; failed=1; fi
+    if [ "$DETECTED" = current ]; then RESULTS[9]='Configured'
+    else RESULTS[9]='Failed: shortcut configuration incomplete'; failed=1; fi
+  else RESULTS[9]='Failed: tmux is unavailable'; failed=1; fi
 fi
 if on_selected shell; then
   on_shell_config
   on_config_state shell
-  if [ "$DETECTED" = current ]; then RESULTS[10]='Configured — local content checked'
-  else RESULTS[10]='Failed — shell integration needs manual review'; failed=1; fi
+  if [ "$DETECTED" = current ]; then RESULTS[10]='Configured'
+  else RESULTS[10]='Failed: review shell configuration'; failed=1; fi
 fi
 platform_apply_extra || failed=1
 if [ "$failed" = 0 ]; then

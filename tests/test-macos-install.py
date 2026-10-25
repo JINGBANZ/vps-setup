@@ -130,19 +130,19 @@ esac''')
         self.assertNotIn('authentication=', out)
         self.assertEqual(before, self.snapshot())
         out = self.run_setup('--select', 'tailscale,codex', '--yes')
-        self.assertIn('No eligible items', out)
+        self.assertIn('No changes selected.', out)
         self.assertNotIn('brew install', self.calls())
         self.assertEqual(before, self.snapshot())
-        self.assertIn('Manual steps', out)
+        self.assertNotIn('Next', out)
 
     def test_missing_install_and_rerun(self):
         (self.state / 'tool-mosh').unlink()
         out = self.run_setup('--select', 'mosh,shortcut', '--dry-run')
-        self.assertIn('Homebrew dependency', out)
+        self.assertIn('  - Install Mosh', out)
         self.assertFalse(self.config.exists())
         out = self.run_setup('--select', 'mosh,shortcut', '--yes')
-        self.assertIn('Installed — local version checked', out)
-        self.assertIn('Configured — local content checked', out)
+        self.assertIn('Installed', out)
+        self.assertIn('Configured', out)
         self.assertTrue(self.workspace.is_dir())
         before = self.snapshot()
         (self.state / 'calls').write_text('')
@@ -150,7 +150,7 @@ esac''')
         self.assertEqual(before, self.snapshot())
         self.assertNotIn('brew install', self.calls())
         self.assertNotIn('curl ', self.calls())
-        self.assertIn('Configuration current — kept', out)
+        self.assertIn('Up to date:', out)
         # Generated code preserves customizations and quotes unusual paths.
         self.assertIn('# user zsh customization', (self.home / '.zshrc').read_text())
         self.assertIn('# user bash customization', (self.home / '.profile').read_text())
@@ -163,6 +163,77 @@ esac''')
             result = subprocess.run(['zsh', '-fuc', '. "$HOME/.config/vps-setup/env.sh"; t work'], env=self.env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_concise_plan_and_relevant_results(self):
+        (self.state / 'tool-codex').unlink()
+        env = {'WORKSPACE_DIR': str(self.home / 'workspace')}
+        before = self.snapshot()
+        out = self.run_setup('--select', 'codex,shortcut', '--dry-run', **env)
+        self.assertEqual(out.split('\nPlan\n', 1)[1],
+                         '  - Install Codex\n  - Set up t shortcut\n'
+                         '  - Configure shell PATH and startup\n')
+        self.assertEqual(before, self.snapshot())
+        self.assertIn('Installed: Tailscale, Mosh, tmux, Git, GitHub CLI, Claude Code', out)
+        self.assertNotIn('test-version', out)
+        self.assertNotIn(str(self.bin), out)
+        out = self.run_setup('--select', 'codex,shortcut', '--yes', **env)
+        results = out.split('\nResults\n', 1)[1]
+        self.assertIn('  - Codex: Installed', results)
+        self.assertIn('  - t shortcut: Configured', results)
+        self.assertIn('Codex sign-in', results)
+        for unrelated in ['Tailscale', 'GitHub sign-in', 'Claude Code sign-in', 'Skipped']:
+            self.assertNotIn(unrelated, results)
+
+    @unittest.skipUnless(shutil.which('zsh'), 'Zsh is required for remote-shell regression')
+    def test_noninteractive_zsh_finds_mosh_server(self):
+        # SSH runs zsh -c, without the login/interactive profiles. A minimal
+        # initial PATH reproduces the Homebrew mosh-server discovery failure.
+        zdot = self.home / 'custom zsh'
+        zdot.mkdir()
+        profile = zdot / '.zshenv'
+        profile.write_text('# custom environment\nexport USER_SETTING=kept\n')
+        self.script('mosh-server', 'printf "server-ready\\n"')
+        remote_env = dict(self.env, ZDOTDIR=str(zdot), PATH='/usr/bin:/bin')
+        before = subprocess.run([shutil.which('zsh'), '-c', 'mosh-server'],
+                                env=remote_env, capture_output=True, text=True)
+        self.assertEqual(before.returncode, 127)
+        nvm = self.home / '.nvm'
+        nvm.mkdir()
+        (nvm / 'nvm.sh').write_text(
+            '[ "${1:-}" = --no-use ] || echo UNEXPECTED_NVM_INIT\nnvm() { :; }\n')
+        self.run_setup('--select', 'shortcut', '--yes', ZDOTDIR=str(zdot))
+        # Neither nvm nor the tmux helper should load for a remote command.
+        (self.config / 'tmux.sh').write_text('echo UNEXPECTED_TMUX_INIT\n')
+        result = subprocess.run([shutil.which('zsh'), '-uc',
+                                 'mosh-server; test "$USER_SETTING" = kept; '
+                                 '. "$ZDOTDIR/.zshenv"; printf "%s\\n" "$PATH"'],
+                                env=remote_env,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines[0], 'server-ready')
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[1].split(':').count(str(self.bin)), 1)
+        self.assertEqual(profile.with_name('.zshenv.vps-setup.bak').read_text(),
+                         '# custom environment\nexport USER_SETTING=kept\n')
+        # Restore the fixture, then verify a rerun neither duplicates nor rewrites.
+        (self.config / 'tmux.sh').unlink()
+        (nvm / 'nvm.sh').unlink()
+        self.run_setup('--select', 'shortcut', '--yes', ZDOTDIR=str(zdot))
+        before = self.snapshot()
+        self.run_setup('--select', 'shell', '--yes', ZDOTDIR=str(zdot))
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual(profile.read_text().count('# vps-setup:path'), 1)
+
+    def test_zshenv_symlink_requires_manual_repair(self):
+        target = self.home / 'custom-env'
+        target.write_text('# keep me\n')
+        (self.home / '.zshenv').symlink_to(target)
+        before = self.snapshot()
+        out = self.run_setup('--select', 'shell', '--yes')
+        self.assertIn('Needs repair:', out)
+        self.assertEqual(before, self.snapshot())
+        self.assertTrue((self.home / '.zshenv').is_symlink())
+
     def test_existing_tailscale_variants_kept(self):
         self.run_setup('--select', 'tailscale', '--yes')
         (self.home / 'Applications/Tailscale.app').rmdir()
@@ -174,7 +245,7 @@ esac''')
         (self.state / 'formula-tailscale').unlink()
         self.script('tailscaled', 'echo daemon-must-not-run >> "$TEST_STATE/forbidden"; exit 99')
         self.install('tailscaled')
-        self.assertIn('tailscaled present', self.run_setup('--select', 'tailscale', '--yes'))
+        self.assertIn('Tailscale', self.run_setup('--select', 'tailscale', '--yes'))
         self.assertNotIn('brew install', self.calls())
         self.assertNotIn('services', self.calls())
 
@@ -209,13 +280,13 @@ platform_ensure_brew
         (self.home / 'Applications/Tailscale.app').rmdir()
         out = self.run_setup('--select', 'tailscale', '--yes')
         self.assertIn('brew install --formula tailscale', self.calls())
-        self.assertIn('Installed — local version checked', out)
+        self.assertIn('Installed', out)
         self.assertNotIn('brew services', self.calls())
 
     def test_broken_tool_is_locked_not_reinstalled(self):
         (self.state / 'broken-codex').touch()
         out = self.run_setup('--select', 'codex', '--yes')
-        self.assertIn('Manual repair needed — not changed', out)
+        self.assertIn('Needs repair:', out)
         self.assertNotIn('curl ', self.calls())
         self.assertFalse(self.config.exists())
 
@@ -241,7 +312,7 @@ platform_ensure_brew
     def test_failures_retry_and_independent_agents(self):
         (self.state / 'tool-codex').unlink()
         out = self.run_setup('--select', 'codex', '--yes', ok=False, FAIL_DOWNLOAD='1')
-        self.assertIn('Failed — installation incomplete', out)
+        self.assertIn('Failed: check the installer output and retry', out)
         self.assertFalse((self.config / 'selection.txt').exists())
         self.run_setup('--select', 'codex', '--yes')
         self.assertNotIn('claude.ai', self.calls())
@@ -249,7 +320,7 @@ platform_ensure_brew
         self.assertNotIn('bun.com', self.calls())
         (self.state / 'tool-mosh').unlink()
         out = self.run_setup('--select', 'mosh', '--yes', ok=False, FAIL_INSTALL='mosh')
-        self.assertIn('Failed — installation incomplete', out)
+        self.assertIn('Failed: check the installer output and retry', out)
         self.run_setup('--select', 'mosh', '--yes')
 
     def test_optional_runtimes_independent(self):
@@ -296,14 +367,14 @@ platform_ensure_brew
         self.nvm_glob_fixture(existing=True)
         before = self.snapshot()
         out = self.run_setup('--select', 'node', '--yes', TEST_NVM_GLOB='1')
-        self.assertIn('LOCKED Node.js / nvm', out)
+        self.assertIn('Node.js / nvm', out)
         self.assertNotIn('curl ', self.calls())
         self.assertEqual(before, self.snapshot())
 
     def test_nvm_new_node_activated_for_post_install_check(self):
         self.nvm_glob_fixture()
         out = self.run_setup('--select', 'node', '--yes', TEST_NVM_GLOB='1')
-        self.assertIn('Installed — local version checked', out)
+        self.assertIn('Installed', out)
         before = self.snapshot()
         (self.state / 'calls').write_text('')
         self.run_setup('--select', 'node', '--yes', TEST_NVM_GLOB='1')
@@ -338,7 +409,7 @@ platform_ensure_brew
         (self.home / '.zshrc').unlink()
         (self.home / '.zshrc').symlink_to(target)
         out = self.run_setup('--select', 'shell', '--yes')
-        self.assertIn('Manual repair needed', out)
+        self.assertIn('Needs repair:', out)
         self.assertEqual(target.read_text(), '# personal\n')
 
     def test_guards(self):

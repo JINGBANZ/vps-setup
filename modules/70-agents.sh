@@ -17,9 +17,9 @@ if { have claude && claude --version >/dev/null 2>&1; } ||
 else
   log "Installing Claude Code"
   if curl -fsSL https://claude.ai/install.sh | bash; then
-    ok "Claude Code installed — run 'claude' to sign in"
+    ok "Claude Code installed"
   else
-    warn "Claude Code install failed (transient?) — skipping; re-run later"
+    warn "Claude Code install failed; check output above and retry"
   fi
 fi
 
@@ -31,11 +31,11 @@ if { have codex && codex --version >/dev/null 2>&1; } ||
    { [ -x "$HOME/.local/bin/codex" ] && "$HOME/.local/bin/codex" --version >/dev/null 2>&1; }; then
   skip "codex"
 else
-  log "Installing Codex CLI"
+  log "Installing Codex"
   if curl -fsSL https://chatgpt.com/codex/install.sh | sh; then
-    ok "codex installed — run 'codex' to sign in"
+    ok "Codex installed"
   else
-    warn "Codex install failed (transient?) — skipping; re-run later"
+    warn "Codex install failed; check output above and retry"
   fi
 fi
 fi # INSTALL_CODEX

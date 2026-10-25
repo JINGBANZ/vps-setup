@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # Presentation only. Selection/dependency validation stays in lib/onboarding.sh.
 on_locked_inventory() {
-  local i=0
-  printf '\nAlready present / manual repair (read-only)\n'
+  local i=0 installed='' current=''
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
-    if ! on_eligible "$i"; then
-      printf '  %-22s %s — %s\n' "${LABELS[$i]}" "${STATES[$i]}" "${DETAILS[$i]}"
+    case "${STATES[$i]}" in
+      installed) installed="${installed:+$installed, }${LABELS[$i]}" ;;
+      current) current="${current:+$current, }${LABELS[$i]}" ;;
+    esac
+    i=$((i+1))
+  done
+  printf '\n'
+  if [ -n "$installed" ]; then printf 'Installed: %s\n' "$installed"; fi
+  if [ -n "$current" ]; then printf 'Up to date: %s\n' "$current"; fi
+  i=0
+  while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
+    if [ "${STATES[$i]}" = broken ]; then
+      printf 'Needs repair: %s — %s\n' "${LABELS[$i]}" "${DETAILS[$i]}"
     fi
     i=$((i+1))
   done
@@ -71,13 +81,13 @@ on_gum_menu() {
   if [ "$SHELL_REQUIRED" = 1 ]; then
     STATES[10]=update; DETAILS[10]='Needs configuration for selected installation'
     on_select shell
-    config_title="$config_title"$'\nShell integration: required for selected tools.'
+    config_title="$config_title"$'\nShell integration included (required).'
   fi
   on_gum_pick 9 "${#COMPONENTS[@]}" "$config_title" || return 1
   on_normalize
   on_stage_summary 9 "${#COMPONENTS[@]}" 'Configuration selected'
   if [ "$tmux_selected" = 0 ] && on_selected tmux; then
-    printf 'Required tool added: tmux (for Session shortcut: t)\n' >&4
+    printf 'Added: tmux (required by t shortcut)\n' >&4
   fi
 }
 

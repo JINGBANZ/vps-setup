@@ -16,6 +16,6 @@ snapshot="$(find "$onboarding_home" -type f -exec sha256sum {} \; | sort)"
 output="$(timeout 30 env HOME="$onboarding_home" SUDO_USER='' \
   /bin/bash "$REPO_ROOT/setup.sh" --select mosh,shell --yes </dev/null)"
 printf '%s\n' "$output"
-[[ "$output" == *'No eligible items selected'* ]]
+[[ "$output" == *'No changes selected.'* ]]
 [ "$snapshot" = "$(find "$onboarding_home" -type f -exec sha256sum {} \; | sort)" ]
 echo 'PASS: real selected apt install and unchanged rerun through shared onboarding'
