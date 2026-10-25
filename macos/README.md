@@ -15,8 +15,15 @@ Run this on the Mac mini in Terminal or an interactive SSH session, **without su
 
 Setup downloads to a temporary directory and cleans it up on exit. No clone or
 pull is needed; rerun the same command to install missing tools. Terminal input
-stays available for the menu and Homebrew prompts. Open a new terminal or SSH
-session afterward to load shell changes.
+stays available for the menu and initial Homebrew installer/administrator prompts.
+After plan approval, package installs use Homebrew's documented
+[`HOMEBREW_NO_ASK=1`](https://docs.brew.sh/Manpage#environment) setting to skip
+repeated package confirmation. This setting applies only to those commands;
+your normal Homebrew preferences are unchanged.
+
+Open a new terminal or SSH session afterward to load shell changes automatically.
+You only need `source "$HOME/.config/vps-setup/env.sh"` if you want to update the
+already-open shell immediately; it is not a command to repeat in every session.
 
 If Command Line Tools are missing, run `xcode-select --install`, finish Apple's
 installer, then rerun setup. Homebrew is added only when needed and may request

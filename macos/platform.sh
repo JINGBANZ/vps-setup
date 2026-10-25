@@ -86,5 +86,9 @@ platform_prepare() {
   export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1
   if [ "$NEED_BREW" = 1 ]; then platform_ensure_brew; fi
 }
-platform_install_tool() { "$BREW_BIN" install --formula "$1"; }
+platform_install_tool() {
+  # The shared review already approved this tool and its dependencies.
+  # Scope Homebrew's documented no-ask mode to this install, not future shells.
+  HOMEBREW_NO_ASK=1 "$BREW_BIN" install --formula "$1"
+}
 platform_apply_extra() { :; }
