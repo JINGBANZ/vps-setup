@@ -149,9 +149,16 @@ LogLevel ERROR
                             self.fail('SSH shortcut exited before creating tmux session: ' + stderr)
                         time.sleep(0.1)
                     else: self.fail('Shortcut did not create a tmux session')
-                    r = run('runuser', '-u', user, '--', 'tmux', 'display-message',
-                            '-p', '-t', '=smoke', '#{pane_current_path}')
-                    self.assertEqual(r.stdout.strip(), str(home / 'workspace'))
+                    # Ask the actual pane shell, rather than racing its startup
+                    # or relying on /proc cwd introspection inside the container.
+                    run('runuser', '-u', user, '--', 'tmux', 'send-keys', '-t', 'smoke:0.0',
+                        'pwd > "$HOME/session-cwd"', 'Enter')
+                    cwd_file = home / 'session-cwd'
+                    for _ in range(100):
+                        if cwd_file.exists() and cwd_file.read_text().strip(): break
+                        time.sleep(0.1)
+                    else: self.fail('tmux pane did not execute the working-directory check')
+                    self.assertEqual(cwd_file.read_text().strip(), str(home / 'workspace'))
                     run('runuser', '-u', user, '--', 'tmux', 'kill-session', '-t', '=smoke')
                     p.communicate(timeout=10)
                     self.assertEqual(p.returncode, 0)
