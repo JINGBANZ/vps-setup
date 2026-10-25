@@ -11,7 +11,7 @@ platform_find_brew() {
   fi
   BREW_BROKEN=0
   if [ -n "$BREW_BIN" ]; then
-    if "$BREW_BIN" --version >/dev/null 2>&1; then eval "$("$BREW_BIN" shellenv)"
+    if "$BREW_BIN" --version >/dev/null 2>&1; then eval "$("$BREW_BIN" shellenv bash)"
     else BREW_BROKEN=1; fi
   fi
 }

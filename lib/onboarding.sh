@@ -209,16 +209,19 @@ on_backup_profiles() {
   done
 }
 on_shell_config() {
-  local env_tmp path_tmp profile_tmp env_file path_file quoted brew_dir nvm_quote tmux_quote line path_line profile bash_profile
+  local env_tmp path_tmp profile_tmp env_file path_file quoted nvm_quote tmux_quote line profile bash_profile
   env_file="$CONFIG_DIR/env.sh"
   path_file="$CONFIG_DIR/path.sh"
   env_tmp="$(mktemp)"
   path_tmp="$(mktemp)"
   printf '%s\n' '# Managed by vps-setup.' > "$env_tmp"
-  printf '%s\n' '# Managed by vps-setup. Silent PATH setup for non-interactive shells too.' > "$path_tmp"
-  brew_dir=''
-  if [ -n "$BREW_BIN" ]; then brew_dir="$(dirname "$BREW_BIN")"; fi
-  for candidate in "$HOME/.local/bin" "$HOME/.bun/bin" "$brew_dir"; do
+  printf '%s\n' '# Managed by vps-setup. Silent environment setup.' > "$path_tmp"
+  if [ -n "$BREW_BIN" ]; then
+    printf -v quoted '%q' "$BREW_BIN"
+    printf '_vps_setup_brew=%s\n' "$quoted" >> "$path_tmp"
+    cat "$REPO_ROOT/lib/shell-brew.sh" >> "$path_tmp"
+  fi
+  for candidate in "$HOME/.local/bin" "$HOME/.bun/bin"; do
     [ -n "$candidate" ] || continue
     printf -v quoted '%q' "$candidate"
     printf 'case ":$PATH:" in *:%s:*) ;; *) export PATH=%s:"$PATH" ;; esac\n' "$quoted" "$quoted" >> "$path_tmp"
@@ -226,11 +229,21 @@ on_shell_config() {
   on_write "$path_tmp" "$path_file"
   rm -f "$path_tmp"
   printf -v quoted '%q' "$path_file"
-  path_line="[ ! -f $quoted ] || . $quoted # vps-setup:path"
-  printf '%s\n' "$path_line" >> "$env_tmp"
+  printf '[ ! -f %s ] || . %s\n' "$quoted" "$quoted" >> "$env_tmp"
   if [ -s "$NVM_DIR/nvm.sh" ]; then
     printf -v nvm_quote '%q' "$NVM_DIR"
-    printf 'export NVM_DIR=%s\n[ ! -s "$NVM_DIR/nvm.sh" ] || . "$NVM_DIR/nvm.sh"\n' "$nvm_quote" >> "$env_tmp"
+    # Use nvm's own activation logic so Node also works in executable scripts
+    # (not just shell functions), and inherited version selections are honored.
+    printf 'export NVM_DIR=%s\n' "$nvm_quote" >> "$env_tmp"
+    cat >> "$env_tmp" <<'EOF'
+if ! typeset -f nvm >/dev/null 2>&1 && [ -s "$NVM_DIR/nvm.sh" ]; then
+  # A zero-argument function prevents job arguments (such as --install) from
+  # becoming nvm.sh options when this file is loaded through BASH_ENV.
+  _vps_setup_load_nvm() { . "$NVM_DIR/nvm.sh" >/dev/null; }
+  _vps_setup_load_nvm
+  unset -f _vps_setup_load_nvm
+fi
+EOF
   fi
   if [ -f "$CONFIG_DIR/tmux.sh" ] || on_selected shortcut; then
     printf -v tmux_quote '%q' "$CONFIG_DIR/tmux.sh"
@@ -247,10 +260,11 @@ on_shell_config() {
   if [ "${CONFIG_CHECK:-0}" != 1 ]; then mkdir -p "${ZDOTDIR:-$HOME}"; fi
   for profile in "${ZDOTDIR:-$HOME}/.zshenv" "${ZDOTDIR:-$HOME}/.zprofile" "${ZDOTDIR:-$HOME}/.zshrc" "$bash_profile" "$HOME/.bashrc"; do
     profile_tmp="$(mktemp)"
-    if [ -f "$profile" ]; then sed '/ # vps-setup:macos$/d; / # vps-setup:shell$/d; / # vps-setup:path$/d' "$profile" > "$profile_tmp"; fi
-    if [ "$profile" = "${ZDOTDIR:-$HOME}/.zshenv" ]; then
-      printf '%s\n' "$path_line" >> "$profile_tmp"
-    else
+    # Remote Bash reads .bashrc, whose existing non-interactive guard can return
+    # early. The shared environment must precede it; retain all custom content.
+    if [ "$profile" = "$HOME/.bashrc" ]; then printf '%s\n' "$line" > "$profile_tmp"; fi
+    if [ -f "$profile" ]; then sed '/ # vps-setup:macos$/d; / # vps-setup:shell$/d; / # vps-setup:path$/d' "$profile" >> "$profile_tmp"; fi
+    if [ "$profile" != "$HOME/.bashrc" ]; then
       printf '%s\n' "$line" >> "$profile_tmp"
     fi
     on_write "$profile_tmp" "$profile"

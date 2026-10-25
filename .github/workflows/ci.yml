@@ -31,6 +31,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install Zsh for the startup matrix
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - name: Shared Linux/macOS onboarding (isolated provisioning commands)
         # Use Apple's Bash 3.2 on macOS, rather than Homebrew's newer bash.
         run: |
@@ -38,7 +41,28 @@ jobs:
           trap ui_cleanup EXIT
           ui_gum_download
           export GUM_TEST_BIN="$UI_GUM_BIN"
+          source tests/prepare-nvm-test.sh
+          trap 'ui_cleanup; rm -f "$NVM_TEST_SCRIPT"' EXIT
           /bin/bash tests/test-onboarding.sh
+
+  ssh-startup:
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      VPS_SETUP_SSH_TEST_CONTAINER: '1'
+    steps:
+      - name: Install isolated SSH test prerequisites
+        run: |
+          apt-get update
+          apt-get install -y git ca-certificates curl python3 openssh-client openssh-server zsh tmux mosh
+      - uses: actions/checkout@v4
+      - name: Real SSH shell startup, Mosh server and tmux shortcut
+        shell: bash
+        run: |
+          source tests/prepare-nvm-test.sh
+          trap 'rm -f "$NVM_TEST_SCRIPT"' EXIT
+          python3 tests/test-ssh-startup.py
 
   # Regression guard for the fresh-box install hang: debconf/needrestart trying
   # to prompt with no TTY (the `curl | sudo bash` path). Runs on the two Ubuntu
