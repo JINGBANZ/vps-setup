@@ -58,6 +58,8 @@ mac_gum_menu() {
   mac_normalize
 }
 
+# SELECTED is shared with mac_normalize/mac_selected in macos/lib.sh.
+# shellcheck disable=SC2034
 mac_plain_menu() {
   local answer token index item
   while :; do
