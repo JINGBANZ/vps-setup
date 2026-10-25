@@ -79,12 +79,10 @@ on normal exit, cancellation or handled signals. As with other processes, SIGKIL
 or power loss cannot run cleanup handlers.
 
 If the download, checksum or version check fails, or the terminal is unsupported,
-setup automatically uses the numbered menu: toggle eligible numbers, use `all`,
-`none` or `defaults`, press Enter to review, then type `apply`. Set
-`VPS_SETUP_UI=plain` before the bootstrap command to use that mode explicitly
-(for example with a screen reader). `--check`, `--dry-run` and `--yes` never
-fetch or invoke Gum. Only interactive macOS onboarding uses this UI; Linux
-provisioning remains unchanged.
+setup stops before provisioning with an actionable error. There is no numbered
+menu or `VPS_SETUP_UI=plain` mode. `--check`, `--dry-run` and explicit
+`--select LIST --yes` never fetch or invoke Gum. Linux uses the same onboarding
+engine and keyboard UI, with its own platform adapter and system options.
 
 | ID | Purpose / installation | Default if eligible |
 | --- | --- | --- |
@@ -115,16 +113,17 @@ Node/Bun and configuration alone do not install Homebrew.
 
 ### What runs under the hood
 
-`setup.sh` dispatches to `macos/setup.sh`, which uses `macos/lib.sh` and shared
-`lib/common.sh`. It does **not** run the Linux module directory in order.
+`setup.sh` enters shared `lib/setup.sh`, using `lib/onboarding.sh` and
+`lib/onboarding-ui.sh`. The `macos/platform.sh` adapter supplies Mac detection
+and Homebrew installation. It does **not** run Linux system modules.
 
 | Selected work | Implementation |
 | --- | --- |
-| Missing formula tools | `macos/setup.sh`: one `brew install --formula TOOL` per selected tool |
+| Missing formula tools | `macos/platform.sh`: one `brew install --formula TOOL` per selected tool |
 | Node or Bun | `modules/60-node-bun.sh`, separately per selected runtime with independent flags |
 | Codex or Claude | `modules/70-agents.sh`, separately per selected agent with independent flags |
 | Session shortcut | `modules/80-tmux.sh` generates a temporary desired file; changed content is applied |
-| Shell integration | `macos/lib.sh`: compare and update managed initialization |
+| Shell integration | `lib/onboarding.sh`: compare and update managed initialization |
 
 Thus the amount of installation work depends on selection and detected state,
 not a fixed count of modules. Read-only inventory also generates a temporary
@@ -208,7 +207,7 @@ run `--check` on your Mac for its actual local inventory.
 
 | Area | Source of truth | Repository choice |
 | --- | --- | --- |
-| Terminal UI | [Gum v0.17.0](https://github.com/charmbracelet/gum/releases/tag/v0.17.0), [choose implementation](https://github.com/charmbracelet/gum/tree/v0.17.0/choose) | Temporary pinned binary; release digests embedded in the loader; numbered-menu fallback |
+| Terminal UI | [Gum v0.17.0](https://github.com/charmbracelet/gum/releases/tag/v0.17.0), [choose implementation](https://github.com/charmbracelet/gum/tree/v0.17.0/choose) | Temporary pinned binary; release digests embedded in the loader; clear failure before provisioning if Gum is unavailable |
 | Homebrew | [Installation](https://docs.brew.sh/Installation) | Download official installer to a temporary file with `curl -o "$installer"`, execute `/bin/bash "$installer"`, then remove it; download failure prevents execution |
 | Tailscale | [macOS variants](https://tailscale.com/docs/concepts/macos-variants), [daemon setup](https://github.com/tailscale/tailscale/wiki/Tailscaled-on-macOS) | Formula only when absent; startup/sign-in manual; preserve existing variants |
 | Mosh | [Official installation](https://mosh.org/#getting) | Homebrew package; SSH/UDP configuration outside this installer |

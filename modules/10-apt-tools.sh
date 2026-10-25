@@ -3,7 +3,14 @@
 # (unzip must exist before Bun is installed in 60-node-bun.sh.)
 [ -n "${_VPS_COMMON_LOADED:-}" ] || { echo "run via setup.sh" >&2; exit 1; }
 
-APT_PKGS=(git curl unzip tmux mosh ufw)
+# Explicit onboarding list prevents unrelated unchecked tools being installed.
+# Retain defaults for callers sourcing this module independently.
+if [ "${ONBOARDING_APT_PACKAGES+x}" = x ]; then
+  APT_PKGS=()
+  read -r -a APT_PKGS <<< "$ONBOARDING_APT_PACKAGES" || true
+else
+  APT_PKGS=(git curl unzip tmux mosh ufw)
+fi
 
 missing=()
 for pkg in "${APT_PKGS[@]}"; do

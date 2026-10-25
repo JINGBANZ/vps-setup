@@ -23,7 +23,8 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # The user we install user-level tools for. Under sudo this is the original
 # login user, not root.
-TARGET_USER="${SUDO_USER:-$(id -un)}"
+if [ "$(id -u)" -eq 0 ]; then TARGET_USER="${SUDO_USER:-$(id -un)}"
+else TARGET_USER="$(id -un)"; fi
 if [ "$(uname -s)" = Darwin ]; then
   # macos/setup.sh requires the logged-in, non-root user. macOS has no getent.
   TARGET_HOME="$HOME"

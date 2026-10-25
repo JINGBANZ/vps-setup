@@ -26,7 +26,7 @@ class MacSetup(unittest.TestCase):
                         PATH=f'{self.bin}:{os.environ["PATH"]}', TEST_STATE=str(self.state),
                         WORKSPACE_DIR=str(self.workspace), SUDO_USER='',
                         GH_RUNNER_REPO='', DEV_POSTGRES='0', MAC_TAILSCALE='1',
-                        VPS_SETUP_UI='plain')
+                        VPS_SETUP_UI='auto')
         self.env.pop('MAC_ALWAYS_ON', None)
         self.script('uname', 'echo "${TEST_OS:-Darwin}"')
         self.script('id', 'case "$1" in -u) echo "${TEST_UID:-501}" ;; -un) echo tester ;; esac')
@@ -188,11 +188,12 @@ cat > "$4" <<'INSTALL'
 [ "${FAIL_SCRIPT:-0}" = 0 ] || exit 23
 touch "$TEST_STATE/homebrew-installer-ran"
 INSTALL''')
-        script = '''. "$1/macos/lib.sh"
+        script = '''. "$1/lib/onboarding.sh"
+. "$1/macos/platform.sh"
 BREW_BIN=''; BREW_BROKEN=0
 TEST_BREW="$2"
-mac_find_brew() { BREW_BIN="$TEST_BREW"; BREW_BROKEN=0; }
-mac_ensure_brew
+platform_find_brew() { BREW_BIN="$TEST_BREW"; BREW_BROKEN=0; }
+platform_ensure_brew
 '''
         for overrides, success in [({'FAIL_DOWNLOAD': '1'}, False),
                                    ({'FAIL_SCRIPT': '1'}, False), ({}, True)]:
@@ -234,9 +235,6 @@ mac_ensure_brew
     def test_none_and_cancel_no_writes(self):
         before = self.snapshot()
         self.run_setup('--select', 'none', '--yes', MAC_ALWAYS_ON='1')
-        self.assertEqual(before, self.snapshot())
-        result = subprocess.run(['python3', str(ROOT / 'tests/test-macos-menu.py'), str(ROOT / 'setup.sh')], env=self.env, capture_output=True, text=True, timeout=40)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(before, self.snapshot())
 
     def test_failures_retry_and_independent_agents(self):

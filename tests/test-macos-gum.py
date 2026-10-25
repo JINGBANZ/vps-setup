@@ -71,12 +71,12 @@ class Terminal:
     def send(self, data):
         os.write(self.master, data)
 
-    def finish(self):
+    def finish(self, expected=0):
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline and self.read():
             pass
         self.proc.wait(timeout=3)
-        if self.proc.returncode:
+        if self.proc.returncode != expected:
             raise AssertionError(self.output.decode(errors='replace'))
         return self.output.decode(errors='replace')
 
@@ -226,7 +226,7 @@ class GumTests(unittest.TestCase):
             self.f.run_setup(*args, VPS_SETUP_UI='auto')
         self.assert_no_install()
 
-    def test_unavailable_gum_falls_back(self):
+    def test_unavailable_gum_stops_before_mutation(self):
         self.f.script('gum', 'exit 1')
         self.f.script('curl', 'echo failed-ui-download >> "$TEST_STATE/calls"; exit 22')
         self.f.script('uname', 'case "$1" in -s) echo Darwin ;; -m) echo arm64 ;; esac')
@@ -235,20 +235,18 @@ class GumTests(unittest.TestCase):
         self.env['TMPDIR'] = str(tempdir)
         before = self.f.snapshot()
         t = self.terminal()
-        t.expect('Keyboard menu unavailable; using the numbered menu.')
-        t.expect('Toggle eligible numbers')
-        t.send(b'q\r')
-        t.finish()
+        t.expect('Cannot prepare Gum')
+        out = t.finish(expected=1)
+        self.assertNotIn('Toggle eligible numbers', out)
         self.assertEqual(list(tempdir.iterdir()), [])
         self.assertEqual(before, self.f.snapshot())
         self.assertIn('failed-ui-download', self.f.calls())
 
-    def test_dumb_terminal_uses_plain_without_download(self):
+    def test_dumb_terminal_stops_without_download(self):
         self.env['TERM'] = 'dumb'
         t = self.terminal()
-        t.expect('Toggle eligible numbers')
-        t.send(b'q\r')
-        t.finish()
+        t.expect('Cannot prepare Gum')
+        t.finish(expected=1)
         self.assert_no_install()
 
     def test_verified_download_cleanup_and_rejection(self):

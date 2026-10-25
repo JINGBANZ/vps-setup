@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Optional terminal UI dependency. No downloads or terminal changes on source.
+# Interactive terminal UI dependency. No downloads or terminal changes on source.
 # v2.0.2 fails our Space-toggle PTY regression; keep this tested release pinned.
 # Digests: official release assets at github.com/charmbracelet/gum/releases/tag/v0.17.0.
 UI_GUM_VERSION=0.17.0
@@ -53,14 +53,13 @@ ui_gum_download() {
 
 ui_prepare() {
   local candidate
-  [ "${VPS_SETUP_UI:-auto}" != plain ] || return 1
   [ "${TERM:-dumb}" != dumb ] && [ -n "${TERM:-}" ] || return 1
   [ -t 3 ] && [ -t 4 ] || return 1
   candidate="$(command -v gum || true)"
   if [ -n "$candidate" ] && ui_gum_version_ok "$candidate"; then UI_GUM_BIN="$candidate"; return 0; fi
   if ui_gum_download; then return 0; fi
   ui_cleanup
-  printf 'Keyboard menu unavailable; using the numbered menu.\n' >&2
+  printf 'Unable to prepare the verified Gum keyboard menu.\n' >&2
   return 1
 }
 
