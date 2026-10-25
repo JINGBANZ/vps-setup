@@ -162,13 +162,17 @@ on_inventory() {
   done
 }
 on_plan() {
-  local i=0 id
+  local i=0 id dependency shell_note=''
+  for dependency in tailscale mosh tmux git gh codex claude node bun shortcut; do
+    if on_selected "$dependency"; then shell_note=' (required by your selections)'; break; fi
+  done
   printf '\nPlan — selected eligible items only\n'
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
     id="${COMPONENTS[$i]}"
     if on_selected "$id"; then
       case "$id" in
-        shortcut|shell|security|disk-guard) printf '  %s: configure/update (not software installation)\n' "$id" ;;
+        shell) printf '  shell: configure PATH and Bash/Zsh startup%s\n' "$shell_note" ;;
+        shortcut|security|disk-guard) printf '  %s: configure/update (not software installation)\n' "$id" ;;
         *) printf '  %s: install missing tool\n' "$id" ;;
       esac
     fi

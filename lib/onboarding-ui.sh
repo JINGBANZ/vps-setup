@@ -24,7 +24,8 @@ on_gum_pick() {
     i=$((i+1))
   done
   [ "${#options[@]}" -gt 0 ] || return 0
-  printf '\n%s\n↑/↓ move • Space toggle • Ctrl-A all/none • Enter continue • Esc cancel\n' "$title" >&4
+  # Keep stage instructions inside Gum so its renderer clears them on exit.
+  # Gum supplies the keyboard help while the checklist is active.
   if ! output="$(ui_gum choose --no-limit --height 11 --header "$title" \
     --selected="$defaults" --selected-prefix '[x] ' --cursor-prefix '[ ] ' \
     --unselected-prefix '[ ] ' --label-delimiter '|' --output-delimiter $'\n' \
@@ -38,9 +39,9 @@ on_gum_pick() {
 }
 
 on_gum_menu() {
-  local id
+  local id config_title='Choose configuration updates'
   SHELL_REQUIRED=0
-  on_gum_pick 0 9 '1/2 · Choose tools to install' || return 1
+  on_gum_pick 0 9 'Choose tools to install' || return 1
   # Wait until both pages are complete before adding shortcut dependencies.
   # Otherwise a default shortcut can reselect tmux even when both are later off.
   on_config_state shell
@@ -52,9 +53,9 @@ on_gum_menu() {
   if [ "$SHELL_REQUIRED" = 1 ]; then
     STATES[10]=update; DETAILS[10]='Needs configuration for selected installation'
     on_select shell
-    printf '\nShell integration: required for selected tools.\n' >&4
+    config_title="$config_title"$'\nShell integration: required for selected tools.'
   fi
-  on_gum_pick 9 "${#COMPONENTS[@]}" '2/2 · Choose configuration updates' || return 1
+  on_gum_pick 9 "${#COMPONENTS[@]}" "$config_title" || return 1
   on_normalize
 }
 

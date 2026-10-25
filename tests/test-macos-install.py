@@ -36,7 +36,8 @@ case "$1" in
  --version) [ "${BAD_BREW:-0}" = 0 ] && echo 'brew test' ;;
  shellenv) echo ':' ;;
  list) [ -f "$TEST_STATE/formula-$3" ] ;;
- install) [ "$3" != "${FAIL_INSTALL:-}" ] || exit 1
+ install) [ "${HOMEBREW_NO_ASK:-}" = 1 ] || { echo 'unexpected brew confirmation' >&2; exit 89; }
+          [ "$3" != "${FAIL_INSTALL:-}" ] || exit 1
           touch "$TEST_STATE/tool-$3" "$TEST_STATE/formula-$3" ;;
  *) echo 'forbidden brew service or upgrade' >> "$TEST_STATE/forbidden"; exit 91 ;;
 esac''')
