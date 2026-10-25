@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=macos/lib.sh
 . "$REPO_ROOT/macos/lib.sh"
-SELECTED=" tailscale ssh mosh tmux shortcut git gh codex claude screen power "
+SELECTED=" tailscale ssh mosh tmux shortcut git gh codex claude screen "
 DEFAULTS="$SELECTED"
 explicit=0; assume_yes=0; dry_run=0; check_only=0
 while [ "$#" -gt 0 ]; do
@@ -29,15 +29,23 @@ done
 CONFIG_DIR="$HOME/.config/vps-setup"
 case "$WORKSPACE_DIR" in /*) ;; *) die 'WORKSPACE_DIR must be an absolute path' ;; esac
 case "${ZDOTDIR:-$HOME}" in /*) ;; *) die 'ZDOTDIR must be an absolute path' ;; esac
-case "${MAC_ALWAYS_ON:-1}:${MAC_TAILSCALE:-1}" in
-  0:0|0:1|1:0|1:1) ;; *) die 'MAC_ALWAYS_ON and MAC_TAILSCALE must be 0 or 1' ;;
+case "${MAC_TAILSCALE:-1}" in
+  0|1) ;; *) die 'MAC_TAILSCALE must be 0 or 1' ;;
 esac
 # Plain validated data, never sourced as executable code.
 if [ "$explicit" = 0 ] && [ -f "$CONFIG_DIR/selection.txt" ]; then
   saved="$(cat "$CONFIG_DIR/selection.txt")"
-  mac_parse_selection "${saved:-none}"
+  # Retire only the former power choice; still reject other invalid saved IDs.
+  saved_current=''
+  for saved_id in ${saved//,/ }; do
+    if [ "$saved_id" = power ]; then
+      printf 'Ignoring saved power choice; configure power manually in System Settings.\n'
+    else
+      saved_current="$saved_current $saved_id"
+    fi
+  done
+  mac_parse_selection "${saved_current:-none}"
 fi
-[ "${MAC_ALWAYS_ON:-1}" = 1 ] || mac_deselect power
 [ "${MAC_TAILSCALE:-1}" = 1 ] || mac_deselect tailscale
 mac_discover
 mac_inventory
@@ -61,7 +69,7 @@ if [ "$dry_run" = 0 ] && [ "$assume_yes" = 0 ]; then
         *)
           for token in ${answer//,/ }; do
             case "$token" in
-              1|2|3|4|5|6|7|8|9|10|11|12|13)
+              1|2|3|4|5|6|7|8|9|10|11|12)
                 item="${COMPONENTS[$((token-1))]}"
                 if mac_selected "$item"; then mac_deselect "$item"; else mac_select "$item"; fi ;;
               *) printf 'Unknown selection: %s\n' "$token" ;;
@@ -102,7 +110,6 @@ for component in git gh tmux mosh; do
   fi
 done
 if mac_selected tailscale; then mac_tailscale; fi
-if mac_selected power; then mac_power; fi
 # Independent native installers; Linux defaults remain enabled.
 INSTALL_NODE=0; INSTALL_BUN=0; INSTALL_CODEX=0; INSTALL_CLAUDE=0
 if mac_selected node && ! mac_tool node >/dev/null; then INSTALL_NODE=1; fi

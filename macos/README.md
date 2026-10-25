@@ -49,20 +49,19 @@ selection is remembered as plain data; every run checks the machine again.
 | `codex`, `claude` | Native terminal agents; independent choices | Selected |
 | `node`, `bun` | Project runtimes; independent choices | Off |
 | `screen` | Built-in Screen Sharing guidance | Selected |
-| `power` | AC sleep and supported power-failure recovery | Selected |
 
 The shortcut adds tmux as a dependency; Mosh adds Remote Login guidance.
 Homebrew is installed only when a selected missing package requires it. Existing
 usable tools are reused, including tools outside Homebrew. Detection includes
 versions/paths, Tailscale variant and readable authentication status, loaded
-Sharing services, and AC power values. A loaded service still needs its allowed
+Sharing services. A loaded service still needs its allowed
 users and actual remote access verified. Unreadable auth state is shown as
 `unknown`, not treated as signed out.
 
 ```bash
 bash setup.sh --check                         # read-only inventory and address
 bash setup.sh --select mosh,tmux,codex --dry-run
-bash setup.sh --select tailscale,mosh,tmux,shortcut,codex,claude,screen,power --yes
+bash setup.sh --select tailscale,mosh,tmux,shortcut,codex,claude,screen --yes
 bash setup.sh --select none --yes             # no changes
 ```
 
@@ -72,7 +71,7 @@ password for selected system changes. These flags apply only to macOS; Linux
 rejects them rather than silently starting provisioning.
 
 Deselecting skips a component; it does not uninstall it, remove existing
-shortcuts, or reverse power settings. Reruns do not deliberately upgrade tools,
+shortcuts. Reruns do not deliberately upgrade tools,
 restart a loaded service, or repeat successful native installs. A failed
 selected agent/runtime produces a nonzero exit after the remaining steps;
 rerunning fills in the missing tool. Upgrades are separate maintenance work.
@@ -85,10 +84,16 @@ Symlinked profiles are left intact with a warning: add
 `source ~/.config/vps-setup/env.sh` to their target yourself if needed.
 Authentication is left to you; the Mac installer does not capture it in a log.
 
-Power changes apply to AC only: computer sleep becomes 0; supported autorestart
-becomes 1. Display sleep is left alone. Original values are recorded before the
-first change in `~/.config/vps-setup/power-settings-before.txt`. Restore them in
-System Settings > Energy or with `sudo pmset -c KEY VALUE`.
+Power settings are entirely manual. In **System Settings > Energy**, review
+**Prevent automatic sleeping when the display is off** and restart after power
+failure if available. The installer does not read or modify power settings.
+Display sleep can remain enabled while the computer stays awake.
+
+If an earlier version changed power settings, this update does not undo them.
+Review them manually; the earlier `power-settings-before.txt` backup remains
+available if it was created. Saved selections migrate away from the
+removed component with a notice; an explicit `--select power` is rejected.
+The obsolete `MAC_ALWAYS_ON` variable is ignored.
 
 A new Tailscale install uses the Homebrew **formula** and a system LaunchDaemon.
 Existing GUI apps, user daemons and other installations are kept with startup
@@ -231,8 +236,8 @@ pmset -g custom
 
 Running setup again fills in missing tools and refreshes managed shell snippets.
 It does not deliberately upgrade installed packages or restart an already
-loaded Tailscale service. The legacy `MAC_ALWAYS_ON=0` and `MAC_TAILSCALE=0`
-variables deselect those components before the menu; review the final plan. Homebrew formulae do not self-update: use
+loaded Tailscale service. `MAC_TAILSCALE=0` deselects Tailscale before the
+menu; review the final plan. Homebrew formulae do not self-update: use
 `brew update` and `brew upgrade` during a maintenance window, then check the
 Tailscale service. A loaded service is not proof of authenticated connectivity;
 check `tailscale status` and an actual remote connection.
