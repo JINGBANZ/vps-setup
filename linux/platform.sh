@@ -54,18 +54,29 @@ platform_installer_dependencies() {
   printf '%s' "$packages"
 }
 platform_plan() {
-  local dependencies
-  dependencies="$(platform_installer_dependencies)"
-  printf '  Linux uses apt for selected packages; native tools install for %s.\n' "$(id -un)"
-  if on_selected security; then
-    printf '  security: guarded key-only SSH; ufw allows SSH %s/tcp, Mosh UDP and tailscale0; fail2ban; automatic security updates.\n' "$SSH_PORT"
-  fi
-  if on_selected disk-guard; then printf '  disk-guard: journal cap + timer; Docker cache/dangling-image pruning at %s%% disk usage.\n' "${DISK_GUARD_CLEAN_PCT:-90}"; fi
-  if [ -n "$dependencies" ]; then printf '  Installer dependencies (apt): %s\n' "$dependencies"; fi
-  if on_selected runner; then printf '  runner: dedicated ghrunner account + system service; repository %s.\n' "${GH_RUNNER_REPO:-REQUIRED}"; fi
-  if on_selected postgres; then printf '  postgres: local database service; peer-authenticated superuser role for %s.\n' "$TARGET_USER"; fi
-  printf 'Existing tools and Tailscale installations are kept; sign-in stays manual.\n'
+  local dependency
+  while IFS= read -r dependency; do
+    printf '  - Install %s (dependency, apt)\n' "$dependency"
+  done < <(on_selection_words "$(platform_installer_dependencies)")
 }
+platform_plan_component() {
+  case "$1" in
+    security)
+      printf '  - Configure Linux security\n'
+      printf '    Key-only SSH when an authorized key exists; firewall allows SSH %s/tcp, Mosh UDP and tailscale0.\n' "$SSH_PORT"
+      printf '    Enable fail2ban and automatic security updates.\n' ;;
+    disk-guard)
+      printf '  - Enable disk guard\n'
+      printf '    Cap journal at 200 MB; prune Docker build cache and dangling images at %s%% disk usage.\n' "${DISK_GUARD_CLEAN_PCT:-90}" ;;
+    runner)
+      printf '  - Install GitHub Actions runner (%s)\n' "${GH_RUNNER_REPO:-set GH_RUNNER_REPO}"
+      printf '    Install a system service; run repository workflows as ghrunner.\n' ;;
+    postgres)
+      printf '  - Install PostgreSQL (local socket, peer auth)\n'
+      printf '    Database superuser: %s\n' "$TARGET_USER" ;;
+  esac
+}
+
 platform_preflight() {
   if on_selected runner; then
     [ -n "${GH_RUNNER_REPO:-}" ] || die 'Set GH_RUNNER_REPO=owner/repo before selecting runner; no changes applied'
@@ -98,11 +109,11 @@ platform_prepare() {
     for item in 15-ssh-hardening 20-firewall 25-fail2ban 30-auto-updates; do
       platform_run_module "modules/$item.sh" || return 1
     done
-    RESULTS[11]='Configuration modules completed — see individual results above'
+    RESULTS[11]='Completed — see module output'
   fi
   if on_selected disk-guard; then
     platform_run_module modules/35-disk-guard.sh || return 1
-    RESULTS[12]='Configuration module completed — unchanged files kept'
+    RESULTS[12]='Completed — see module output'
   fi
 }
 platform_install_tool() {
@@ -117,21 +128,18 @@ platform_apply_extra() {
   local failed=0
   if on_selected runner; then
     if platform_run_module modules/85-gh-runner.sh && [ -f /opt/actions-runner/.runner ]; then
-      RESULTS[13]='Installed — registration file present'
+      RESULTS[13]='Installed'
     else RESULTS[13]='Failed — inspect runner installation output'; failed=1; fi
   fi
   if on_selected postgres; then
     if DEV_POSTGRES=1 platform_run_module modules/90-postgres.sh; then
       platform_detect_extra postgres
-      if [ "$DETECTED" = installed ]; then RESULTS[14]='Installed — package present'
+      if [ "$DETECTED" = installed ]; then RESULTS[14]='Installed'
       else RESULTS[14]='Failed — PostgreSQL package missing'; failed=1; fi
     else RESULTS[14]='Failed — inspect PostgreSQL installation output'; failed=1; fi
   fi
   return "$failed"
 }
-platform_manual() {
-  printf '\nManual steps (not performed or tested):\n'
-  printf '  • Sign in with sudo tailscale up, gh auth login, claude or codex as needed.\n'
-  printf '  • Existing credentials are kept; no client connection tests are run.\n'
-  printf '  • Open a new shell after configuration changes. tmux sessions do not survive reboots.\n'
+platform_next_steps() {
+  if [ "${RESULTS[0]}" = Installed ]; then on_next_step 'Tailscale sign-in: sudo tailscale up'; fi
 }

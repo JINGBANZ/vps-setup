@@ -29,13 +29,11 @@ platform_ensure_brew() {
   [ -n "$BREW_BIN" ] && [ "$BREW_BROKEN" = 0 ]
 }
 
-platform_manual() {
-  printf '\nManual steps (not performed or tested):\n'
-  printf '  • System Settings > General > Sharing: Remote Login / optional Screen Sharing; choose allowed users.\n'
-  printf '  • System Settings > Energy: choose sleep and power-failure settings yourself.\n'
-  printf '  • For a NEW Homebrew Tailscale install only, start it when ready: sudo brew services start tailscale.\n'
-  printf '  • Sign in to Tailscale, GitHub and selected agents if needed; keep existing credentials.\n'
-  printf '  • Open a new shell after configuration changes. tmux sessions do not survive reboots.\n'
+platform_next_steps() {
+  if [ "${RESULTS[0]}" = Installed ]; then
+    on_next_step 'Start Tailscale: sudo brew services start tailscale'
+    on_next_step 'Tailscale sign-in: sudo tailscale up'
+  fi
 }
 
 platform_init() {
@@ -73,8 +71,9 @@ platform_plan() {
   local id
   NEED_BREW=0
   for id in tailscale git gh tmux mosh; do if on_selected "$id"; then NEED_BREW=1; fi; done
-  if [ "$NEED_BREW" = 1 ]; then printf '  Homebrew dependency: %s\n' "${BREW_BIN:-install once}"; fi
-  printf 'Existing tools and Tailscale services are kept. Power and Sharing are manual.\n'
+  if [ "$NEED_BREW" = 1 ] && [ -z "$BREW_BIN" ]; then
+    printf '  - Install Homebrew (required)\n'
+  fi
 }
 platform_preflight() {
   if [ "$NEED_BREW" = 1 ]; then

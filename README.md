@@ -20,9 +20,11 @@ use remains supported on Linux for installations intended for root. An outer
 user's tools and shell configuration as root.
 
 Use **↑/↓** to move, **Space** to toggle, **Ctrl-A** for all/none, and **Enter**
-to continue. Review the plan and choose **Install** or **Cancel** (the default).
+to continue. Review the plan and choose **Apply** or **Cancel** (the default).
 **Esc / Ctrl-C** cancels. Installed tools and broken installations appear in a
-read-only summary, without checkboxes; broken tools need manual repair.
+read-only summary, without checkboxes; broken tools need manual repair. Selection
+summaries stay on screen, followed by a bulleted action plan. Results list only
+attempted work and relevant next steps. An empty plan exits without confirmation.
 
 The script bootstraps [Gum v0.17.0](https://github.com/charmbracelet/gum/releases/tag/v0.17.0)
 on the server running setup, not on the laptop displaying an SSH session. It
@@ -80,7 +82,7 @@ Pass options through the same bootstrap command on either OS:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select mosh,tmux,shortcut --yes
 ```
 
-`--check` inventories local state; `--dry-run` prints a plan. Neither writes
+`--check` shows installed versions, paths and repair details; `--dry-run` prints a plan. Neither writes
 configuration or installs software. `--yes` requires an explicit `--select`
 list (`none` is valid). All three modes skip Gum. IDs are
 `tailscale,mosh,tmux,git,gh,codex,claude,node,bun,shortcut,shell`, plus Linux-only
@@ -95,6 +97,9 @@ is saved to `~/vps-setup.log` (override with `LOGFILE`). Configuration reconcili
 may enable stopped services; this is not an assurance that services never change.
 
 ## After setup
+
+Shell integration also adds a silent PATH hook to `.zshenv`, so non-interactive
+SSH commands can find Homebrew tools such as `mosh-server`.
 
 Open a new shell. Sign in to selected tools when needed (`sudo tailscale up`,
 `gh auth login`, `claude`, `codex`). On macOS, Remote Login, Screen Sharing,

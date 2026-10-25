@@ -7,12 +7,12 @@ die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 on_usage() {
   cat <<'EOF'
 Usage: bash setup.sh [options] (normal user; Linux requests sudo as needed)
-  --check             Read-only local installation inventory.
+  --check             Show installed versions, paths and repair details.
   --dry-run           Read-only plan; no installation or connection probes.
   --select LIST       Comma-separated IDs, or none. Installed items stay locked.
   --yes               Apply an explicit --select list without menu confirmation.
   --help              Show help.
-Interactive: arrows move, Space toggles, Enter continues; review Install / Cancel.
+Interactive: arrows move, Space toggles, Enter continues; review Apply / Cancel.
 Interactive setup requires Gum (automatically bootstrapped; no numbered menu).
 Tools: tailscale,mosh,tmux,git,gh,codex,claude,node,bun
 Configuration: shortcut,shell
@@ -147,7 +147,7 @@ on_normalize() {
 }
 on_inventory() {
   local i=0 mark
-  printf '\nLocal installation inventory (not connectivity verification)\n'
+  printf '\nInventory\n'
   platform_inventory
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
     [ "$i" != 0 ] || printf '\nTools\n'
@@ -162,24 +162,25 @@ on_inventory() {
   done
 }
 on_plan() {
-  local i=0 id dependency shell_note=''
-  for dependency in tailscale mosh tmux git gh codex claude node bun shortcut; do
-    if on_selected "$dependency"; then shell_note=' (required by your selections)'; break; fi
-  done
-  printf '\nPlan — selected eligible items only\n'
+  local i=0 id
+  printf '\nPlan\n'
+  platform_plan
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
     id="${COMPONENTS[$i]}"
     if on_selected "$id"; then
       case "$id" in
-        shell) printf '  shell: configure PATH and Bash/Zsh startup%s\n' "$shell_note" ;;
-        shortcut|security|disk-guard) printf '  %s: configure/update (not software installation)\n' "$id" ;;
-        *) printf '  %s: install missing tool\n' "$id" ;;
+        shell) printf '  - Configure shell PATH and startup\n' ;;
+        shortcut)
+          printf '  - Set up t shortcut\n'
+          if [ "$WORKSPACE_DIR" != "$HOME/workspace" ]; then printf '    Sessions: %s\n' "$WORKSPACE_DIR"; fi ;;
+        security|disk-guard|runner|postgres) platform_plan_component "$id" ;;
+        *) printf '  - Install %s\n' "${LABELS[$i]}" ;;
       esac
     fi
     i=$((i+1))
   done
-  platform_plan
 }
+
 on_write() {
   local source="$1" target="$2" stage
   if cmp -s "$source" "$target"; then return 0; fi
@@ -208,17 +209,25 @@ on_backup_profiles() {
   done
 }
 on_shell_config() {
-  local env_tmp profile_tmp env_file quoted brew_dir nvm_quote tmux_quote line profile bash_profile
+  local env_tmp path_tmp profile_tmp env_file path_file quoted brew_dir nvm_quote tmux_quote line path_line profile bash_profile
   env_file="$CONFIG_DIR/env.sh"
+  path_file="$CONFIG_DIR/path.sh"
   env_tmp="$(mktemp)"
+  path_tmp="$(mktemp)"
   printf '%s\n' '# Managed by vps-setup.' > "$env_tmp"
+  printf '%s\n' '# Managed by vps-setup. Silent PATH setup for non-interactive shells too.' > "$path_tmp"
   brew_dir=''
   if [ -n "$BREW_BIN" ]; then brew_dir="$(dirname "$BREW_BIN")"; fi
   for candidate in "$HOME/.local/bin" "$HOME/.bun/bin" "$brew_dir"; do
     [ -n "$candidate" ] || continue
     printf -v quoted '%q' "$candidate"
-    printf 'case ":$PATH:" in *:%s:*) ;; *) export PATH=%s:"$PATH" ;; esac\n' "$quoted" "$quoted" >> "$env_tmp"
+    printf 'case ":$PATH:" in *:%s:*) ;; *) export PATH=%s:"$PATH" ;; esac\n' "$quoted" "$quoted" >> "$path_tmp"
   done
+  on_write "$path_tmp" "$path_file"
+  rm -f "$path_tmp"
+  printf -v quoted '%q' "$path_file"
+  path_line="[ ! -f $quoted ] || . $quoted # vps-setup:path"
+  printf '%s\n' "$path_line" >> "$env_tmp"
   if [ -s "$NVM_DIR/nvm.sh" ]; then
     printf -v nvm_quote '%q' "$NVM_DIR"
     printf 'export NVM_DIR=%s\n[ ! -s "$NVM_DIR/nvm.sh" ] || . "$NVM_DIR/nvm.sh"\n' "$nvm_quote" >> "$env_tmp"
@@ -236,30 +245,38 @@ on_shell_config() {
     if [ -f "$profile" ]; then bash_profile="$profile"; break; fi
   done
   if [ "${CONFIG_CHECK:-0}" != 1 ]; then mkdir -p "${ZDOTDIR:-$HOME}"; fi
-  for profile in "${ZDOTDIR:-$HOME}/.zprofile" "${ZDOTDIR:-$HOME}/.zshrc" "$bash_profile" "$HOME/.bashrc"; do
+  for profile in "${ZDOTDIR:-$HOME}/.zshenv" "${ZDOTDIR:-$HOME}/.zprofile" "${ZDOTDIR:-$HOME}/.zshrc" "$bash_profile" "$HOME/.bashrc"; do
     profile_tmp="$(mktemp)"
-    if [ -f "$profile" ]; then sed '/ # vps-setup:macos$/d; / # vps-setup:shell$/d' "$profile" > "$profile_tmp"; fi
-    printf '%s\n' "$line" >> "$profile_tmp"
+    if [ -f "$profile" ]; then sed '/ # vps-setup:macos$/d; / # vps-setup:shell$/d; / # vps-setup:path$/d' "$profile" > "$profile_tmp"; fi
+    if [ "$profile" = "${ZDOTDIR:-$HOME}/.zshenv" ]; then
+      printf '%s\n' "$path_line" >> "$profile_tmp"
+    else
+      printf '%s\n' "$line" >> "$profile_tmp"
+    fi
     on_write "$profile_tmp" "$profile"
     rm -f "$profile_tmp"
   done
 }
 
+on_next_step() {
+  if [ "$NEXT_STEPS_SHOWN" = 0 ]; then printf '\nNext\n'; NEXT_STEPS_SHOWN=1; fi
+  printf '  - %s\n' "$1"
+}
 on_summary() {
-  local i=0 result
-  printf '\nSummary\n'
+  local i=0 result label
+  printf '\nResults\n'
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
     result="${RESULTS[$i]}"
-    if [ -z "$result" ]; then
-      case "${STATES[$i]}" in
-        installed) result='Already present — kept' ;;
-        current) result='Configuration current — kept' ;;
-        broken) result='Manual repair needed — not changed' ;;
-        *) result='Skipped' ;;
-      esac
-    fi
-    printf '  %-22s %s\n' "${LABELS[$i]}" "$result"
+    label="${LABELS[$i]}"
+    [ "${COMPONENTS[$i]}" != shortcut ] || label='t shortcut'
+    if [ -n "$result" ]; then printf '  - %s: %s\n' "$label" "$result"; fi
     i=$((i+1))
   done
-  platform_manual
+  NEXT_STEPS_SHOWN=0
+  if [ "${RESULTS[10]}" = Configured ]; then on_next_step 'Open a new terminal or SSH session to load shell changes.'; fi
+  if [ "${RESULTS[9]}" = Configured ]; then on_next_step 'Start or resume a session: t <name>'; fi
+  if [ "${RESULTS[4]}" = Installed ]; then on_next_step 'GitHub sign-in, if needed: gh auth login'; fi
+  if [ "${RESULTS[5]}" = Installed ]; then on_next_step 'Codex sign-in, if needed: codex'; fi
+  if [ "${RESULTS[6]}" = Installed ]; then on_next_step 'Claude Code sign-in, if needed: claude'; fi
+  platform_next_steps
 }

@@ -41,7 +41,7 @@ To inspect or preview without installing anything, append `--` and the setup fla
 
 These commands still download setup temporarily. `--yes` requires an explicit
 `--select` list and skips the menu confirmation; upstream installers may still
-prompt. These flags are macOS-only.
+prompt. These flags work on Linux and macOS.
 
 ## Menu: nine tools and two configuration choices
 
@@ -59,13 +59,15 @@ Every run redetects the local installation before applying saved choices.
 
 The keyboard menu uses [Gum](https://github.com/charmbracelet/gum). Installed,
 current and broken items appear in a read-only summary outside the checklists.
+Working items show names only; `--check` includes versions and paths. Repair
+details remain visible in every mode.
 The first checklist selects missing tools; the second selects configuration
 updates. Required shell integration is shown as a dependency of selected tools.
 After each stage, a compact selection summary remains in the terminal while the
 interactive checklist and key hints clear. Empty selections say “None”; required
 shell integration is labeled, and tmux added for the shortcut gets its own
 dependency line. These records describe the plan, not completed installation.
-The final plan includes any dependencies added for the shortcut.
+The final plan is a bulleted action list, including required dependencies.
 
 | Key | Action |
 | --- | --- |
@@ -75,9 +77,9 @@ The final plan includes any dependencies added for the shortcut.
 | Enter | Continue to the next checklist or the plan |
 | Esc / Ctrl-C | Cancel without installing or changing configuration |
 
-After reviewing the plan, choose **Install** or **Cancel** with ←/→ and Enter.
+After reviewing the plan, choose **Apply** or **Cancel** with ←/→ and Enter.
 Cancel is selected by default. Menu failures stop before provisioning. Empty
-checklists are skipped, and accepting an empty selection does not install tools.
+checklists are skipped. An empty plan exits without a confirmation prompt.
 Installed items cannot be selected through bulk actions or `--select` either.
 
 Gum **v0.17.0** is pinned because its arrow/Space behavior passes the real PTY
@@ -150,8 +152,9 @@ disabled for these installation calls; dependencies required by a new formula
 can still be installed by Homebrew. Upstream native installers manage their
 own installation files and may have their own update behavior.
 
-The final summary reports **Installed**, **Already present**, **Configured**,
-**Configuration current**, **Skipped**, **Failed** or **Manual repair needed**.
+The final summary lists only attempted work and relevant next steps. Untouched
+installed tools and current configuration are not repeated. Failures retain
+actionable details.
 Selected install failures produce a nonzero exit after other selected work is
 attempted; failed choices are not saved. A pre-existing broken item is locked
 and reported for manual repair, rather than attempted as an installation. An
@@ -161,7 +164,10 @@ repair needs. Rerun after addressing the failure; working tools will be locked.
 Shell changes live in `~/.config/vps-setup/`. Originals are backed up once as
 `*.vps-setup.bak`; matching files are untouched. Custom profile lines and the
 first existing Bash login profile are preserved. Exported `ZDOTDIR` is honored.
-Symlinked files needing updates remain manual. Open a new shell after changes.
+Symlinked files needing updates remain manual. A small, silent `path.sh` is
+loaded from `.zshenv` for non-interactive Zsh commands, including Mosh startup.
+Login/interactive profiles load `env.sh`, which also initializes nvm and the
+optional tmux helper. Open a new shell after changes.
 `WORKSPACE_DIR` must be absolute and defaults to `~/workspace`.
 
 Saved `ssh`, `screen` and `power` choices are retired with a notice; explicitly
@@ -193,6 +199,23 @@ a Tailscale address, sign-in status or a guarantee of remote reachability.
 No PostgreSQL, Actions runner, disk monitoring, firewall or Linux service module
 runs on the Mac. `DEV_POSTGRES=1` or a nonempty `GH_RUNNER_REPO` produces an error.
 
+## Mosh cannot find mosh-server
+
+Mosh starts its server through a non-interactive SSH command. Zsh reads
+`.zshenv` in that mode, but not `.zprofile` or `.zshrc`. Rerun setup and apply
+**Shell integration** to add the PATH hook; existing Mosh is kept.
+
+For an Apple Silicon Mac using Homebrew's default prefix, the immediate workaround
+from your laptop is:
+
+```bash
+mosh --server=/opt/homebrew/bin/mosh-server mini
+```
+
+Replace `mini` with your SSH host. On an Intel Mac, the default path is
+`/usr/local/bin/mosh-server`. See [Mosh's PATH guidance](https://mosh.org/#faq)
+and [Zsh startup files](https://zsh.sourceforge.io/Doc/Release/Files.html).
+
 ## Session shortcuts
 
 After configuring the shortcut and opening a new shell:
@@ -221,7 +244,7 @@ run `--check` on your Mac for its actual local inventory.
 | Terminal UI | [Gum v0.17.0](https://github.com/charmbracelet/gum/releases/tag/v0.17.0), [choose implementation](https://github.com/charmbracelet/gum/tree/v0.17.0/choose) | Temporary pinned binary; release digests embedded in the loader; clear failure before provisioning if Gum is unavailable |
 | Homebrew | [Installation](https://docs.brew.sh/Installation) | Download official installer to a temporary file with `curl -o "$installer"`, execute `/bin/bash "$installer"`, then remove it; download failure prevents execution |
 | Tailscale | [macOS variants](https://tailscale.com/docs/concepts/macos-variants), [daemon setup](https://github.com/tailscale/tailscale/wiki/Tailscaled-on-macOS) | Formula only when absent; startup/sign-in manual; preserve existing variants |
-| Mosh | [Official installation](https://mosh.org/#getting) | Homebrew package; SSH/UDP configuration outside this installer |
+| Mosh | [Official installation and PATH guidance](https://mosh.org/), [Zsh startup files](https://zsh.sourceforge.io/Doc/Release/Files.html) | Homebrew package and silent Zsh PATH hook; SSH/UDP configuration outside this installer |
 | tmux | [Getting started](https://github.com/tmux/tmux/wiki/Getting-Started) | Homebrew package plus this repository's optional `t` helper |
 | Git / GitHub CLI | [Git macOS](https://git-scm.com/downloads/mac), [GitHub CLI](https://github.com/cli/cli#installation) | Reuse working commands; otherwise Homebrew |
 | Agents | [Codex CLI](https://developers.openai.com/codex/cli), [Claude setup](https://code.claude.com/docs/en/setup) | Official native installers; no Node dependency imposed |

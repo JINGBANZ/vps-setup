@@ -62,23 +62,37 @@ fi''')
         self.assertIn('LOCKED Tailscale', out)
         self.assertIn('Linux security baseline', out)
         out = self.f.run_setup('--dry-run')
-        self.assertIn('security: guarded key-only SSH', out)
-        self.assertIn('Docker cache/dangling-image pruning', out)
-        self.assertNotIn('node: install', out)
+        self.assertIn('Key-only SSH when an authorized key exists', out)
+        self.assertIn('prune Docker build cache and dangling images', out)
+        self.assertNotIn('  - Install Node.js / nvm', out)
         self.f.run_setup('--select', 'none', '--yes')
+        self.assertEqual(before, self.f.snapshot())
+        self.assertEqual(self.f.calls(), '')
+
+    def test_plan_keeps_consequential_system_settings(self):
+        before = self.f.snapshot()
+        out = self.f.run_setup('--select', 'security,disk-guard,runner,postgres',
+                               '--dry-run', SSH_PORT='2222', DISK_GUARD_CLEAN_PCT='95',
+                               GH_RUNNER_REPO='owner/repo')
+        for detail in ['Key-only SSH when an authorized key exists', '2222/tcp',
+                       'Mosh UDP', 'tailscale0', 'fail2ban', 'automatic security updates',
+                       '200 MB', 'prune Docker build cache and dangling images at 95%',
+                       'owner/repo', 'system service', 'ghrunner',
+                       'local socket, peer auth', 'Database superuser:']:
+            self.assertIn(detail, out)
         self.assertEqual(before, self.f.snapshot())
         self.assertEqual(self.f.calls(), '')
 
     def test_only_selected_package_and_config_then_noop_rerun(self):
         (self.f.state / 'tool-mosh').unlink()
         out = self.f.run_setup('--select', 'mosh,shortcut', '--yes')
-        self.assertIn('Installed — local version checked', out)
+        self.assertIn('Installed', out)
         self.assertIn('apt-get install -y mosh', self.f.calls())
         self.assertNotIn('ufw', self.f.calls())
         before = self.f.snapshot()
         (self.f.state / 'calls').write_text('')
         out = self.f.run_setup('--select', 'mosh,shortcut,shell', '--yes')
-        self.assertIn('No eligible items selected', out)
+        self.assertIn('No changes selected.', out)
         self.assertEqual(before, self.f.snapshot())
         self.assertEqual(self.f.calls(), '')
 
@@ -96,11 +110,11 @@ fi''')
         (self.f.state / 'tool-codex').unlink()
         before = self.f.snapshot()
         out = self.f.run_setup('--select', 'codex', '--dry-run')
-        self.assertIn('Installer dependencies (apt): curl', out)
+        self.assertIn('  - Install curl (dependency, apt)', out)
         self.assertEqual(before, self.f.snapshot())
         self.assertEqual(self.f.calls(), '')
         out = self.f.run_setup('--select', 'codex', '--yes')
-        self.assertIn('Installed — local version checked', out)
+        self.assertIn('Installed', out)
         calls = self.f.calls()
         self.assertLess(calls.index('apt-get install -y curl'),
                         calls.index('curl -fsSL https://chatgpt.com/codex/install.sh'))
@@ -129,7 +143,7 @@ fi''')
                 if marker.exists():
                     marker.unlink()
                 out = self.f.run_setup('--select', tool, '--dry-run')
-                self.assertIn('Installer dependencies (apt): curl', out)
+                self.assertIn('  - Install curl (dependency, apt)', out)
         self.assertFalse((self.f.state / 'tool-curl').exists())
         self.assertEqual(self.f.calls(), '')
 
@@ -138,7 +152,7 @@ fi''')
         self.env['TEST_NO_CURL'] = '1'
         for selection in ['none', 'codex', 'shell']:
             out = self.f.run_setup('--select', selection, '--yes')
-            self.assertNotIn('Installer dependencies (apt): curl', out)
+            self.assertNotIn('  - Install curl (dependency, apt)', out)
         (self.f.state / 'tool-mosh').unlink()
         self.f.run_setup('--select', 'mosh', '--yes')
         self.assertIn('apt-get install -y mosh', self.f.calls())
@@ -148,8 +162,8 @@ fi''')
     def test_broken_and_existing_packages_locked(self):
         (self.f.state / 'broken-codex').touch()
         out = self.f.run_setup('--select', 'codex,postgres', '--yes', TEST_POSTGRES='1')
-        self.assertIn('Manual repair needed', out)
-        self.assertIn('LOCKED Local PostgreSQL', out)
+        self.assertIn('Needs repair:', out)
+        self.assertIn('Local PostgreSQL', out)
         self.assertEqual(self.f.calls(), '')
 
     def test_failure_does_not_save_success_and_retry_works(self):
@@ -211,7 +225,7 @@ fi''')
         t.expect('n Cancel')
         t.send(b'y')
         out = t.finish()
-        self.assertIn('Installed — local version checked', out)
+        self.assertIn('Installed', out)
         self.assertIn('Tools selected: Mosh', out)
         self.assertIn('Configuration selected: Shell integration (required)', out)
         self.assertIn('apt-get install -y mosh', self.f.calls())
