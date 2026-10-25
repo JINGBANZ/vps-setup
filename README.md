@@ -47,7 +47,10 @@ provisioning. **There is no numbered menu.**
 
 Homebrew is a conditional dependency, installed only for a selected missing
 formula. A selected shortcut adds missing tmux; selected tools add shell
-integration. Dependencies are shown in the review plan. Existing Tailscale
+integration. On Linux, missing `curl` is added only for selected network
+installers (including the runner); Bun also adds missing `unzip`. These apt
+dependencies appear in the review plan and install before dependent tools.
+Existing Tailscale
 installations and credentials are preserved. No client connectivity tests run.
 
 On Linux, security and disk guard are **configuration reconciliation** choices:

@@ -34,11 +34,23 @@ exec "$@"''')
 if [ "$1" = install ]; then
  shift
  for pkg in "$@"; do
-   case "$pkg" in -y) ;; git|tmux|mosh|unzip) touch "$TEST_STATE/tool-$pkg" ;;
+   case "$pkg" in -y) ;; git|tmux|mosh|unzip|curl) touch "$TEST_STATE/tool-$pkg" ;;
      *) echo "unexpected package $pkg" >> "$TEST_STATE/forbidden"; exit 90 ;;
    esac
  done
 fi''')
+        # Model curl missing from PATH until apt installs it, in every child Bash.
+        bashenv = self.f.bashenv.read_text().replace(
+            ' if [ "${1:-}" = -v ]; then',
+            ' if [ "${1:-}" = -v ]; then\n'
+            '   if [ "${2:-}" = curl ] && [ "${TEST_NO_CURL:-0}" = 1 ] '
+            '&& [ ! -f "$TEST_STATE/tool-curl" ]; then return 1; fi')
+        self.f.bashenv.write_text(bashenv)
+        curl = self.f.bin / 'curl'
+        curl.write_text(curl.read_text().replace(
+            'set -eu\n', 'set -eu\n'
+            '[ "${TEST_NO_CURL:-0}" != 1 ] || [ -f "$TEST_STATE/tool-curl" ] '
+            '|| { echo "curl: command not found" >&2; exit 127; }\n', 1))
         # Any macOS adapter call would fail the test.
         for tool in ['brew', 'xcode-select']:
             self.f.script(tool, 'echo "mac-only $0" >> "$TEST_STATE/forbidden"; exit 90')
@@ -77,6 +89,61 @@ fi''')
         self.assertNotIn('sudo', self.f.calls())
         self.assertNotIn('claude.ai', self.f.calls())
         self.assertNotIn('nvm-sh', self.f.calls())
+
+    def test_missing_curl_installed_before_selected_native_tool(self):
+        """A wget/git/local bootstrap must still support native installation."""
+        self.env['TEST_NO_CURL'] = '1'
+        (self.f.state / 'tool-codex').unlink()
+        before = self.f.snapshot()
+        out = self.f.run_setup('--select', 'codex', '--dry-run')
+        self.assertIn('Installer dependencies (apt): curl', out)
+        self.assertEqual(before, self.f.snapshot())
+        self.assertEqual(self.f.calls(), '')
+        out = self.f.run_setup('--select', 'codex', '--yes')
+        self.assertIn('Installed — local version checked', out)
+        calls = self.f.calls()
+        self.assertLess(calls.index('apt-get install -y curl'),
+                        calls.index('curl -fsSL https://chatgpt.com/codex/install.sh'))
+        self.assertNotIn('claude.ai', calls)
+        before = self.f.snapshot()
+        (self.f.state / 'calls').write_text('')
+        self.f.run_setup('--select', 'codex,shell', '--yes')
+        self.assertEqual(before, self.f.snapshot())
+        self.assertEqual(self.f.calls(), '')
+
+    def test_curl_dependency_failure_stops_before_native_download(self):
+        """A failed prerequisite must not run a dependent installer or save success."""
+        self.env['TEST_NO_CURL'] = '1'
+        (self.f.state / 'tool-codex').unlink()
+        self.f.run_setup('--select', 'codex', '--yes', ok=False, FAIL_APT='1')
+        self.assertNotIn('curl -fsSL', self.f.calls())
+        self.assertFalse((self.f.state / 'tool-codex').exists())
+        self.assertFalse((self.f.config / 'selection.txt').exists())
+
+    def test_every_network_installer_plans_missing_curl(self):
+        """All curl-consuming modules, including the optional runner, declare it."""
+        self.env['TEST_NO_CURL'] = '1'
+        for tool in ['gh', 'tailscale', 'node', 'bun', 'codex', 'claude', 'runner']:
+            with self.subTest(tool=tool):
+                marker = self.f.state / ('tool-' + tool)
+                if marker.exists():
+                    marker.unlink()
+                out = self.f.run_setup('--select', tool, '--dry-run')
+                self.assertIn('Installer dependencies (apt): curl', out)
+        self.assertFalse((self.f.state / 'tool-curl').exists())
+        self.assertEqual(self.f.calls(), '')
+
+    def test_missing_curl_not_installed_for_unrelated_or_locked_choices(self):
+        """Only eligible network work can add curl to the installation plan."""
+        self.env['TEST_NO_CURL'] = '1'
+        for selection in ['none', 'codex', 'shell']:
+            out = self.f.run_setup('--select', selection, '--yes')
+            self.assertNotIn('Installer dependencies (apt): curl', out)
+        (self.f.state / 'tool-mosh').unlink()
+        self.f.run_setup('--select', 'mosh', '--yes')
+        self.assertIn('apt-get install -y mosh', self.f.calls())
+        self.assertNotIn('apt-get install -y curl', self.f.calls())
+        self.assertFalse((self.f.state / 'tool-curl').exists())
 
     def test_broken_and_existing_packages_locked(self):
         (self.f.state / 'broken-codex').touch()

@@ -41,13 +41,27 @@ platform_detect_extra() {
   esac
 }
 platform_inventory() { printf 'Package manager: apt (Debian/Ubuntu)\n'; }
+platform_installer_dependencies() {
+  # Share dependency detection between the reviewed plan and installation.
+  # Bootstrap can use wget/git, so curl is not necessarily present yet.
+  local item packages=''
+  if ! have curl; then
+    for item in gh tailscale node bun codex claude runner; do
+      if on_selected "$item"; then packages=curl; break; fi
+    done
+  fi
+  if on_selected bun && ! have unzip; then packages="${packages:+$packages }unzip"; fi
+  printf '%s' "$packages"
+}
 platform_plan() {
+  local dependencies
+  dependencies="$(platform_installer_dependencies)"
   printf '  Linux uses apt for selected packages; native tools install for %s.\n' "$(id -un)"
   if on_selected security; then
     printf '  security: guarded key-only SSH; ufw allows SSH %s/tcp, Mosh UDP and tailscale0; fail2ban; automatic security updates.\n' "$SSH_PORT"
   fi
   if on_selected disk-guard; then printf '  disk-guard: journal cap + timer; Docker cache/dangling-image pruning at %s%% disk usage.\n' "${DISK_GUARD_CLEAN_PCT:-90}"; fi
-  if on_selected bun; then printf '  bun dependency: unzip (apt, if missing).\n'; fi
+  if [ -n "$dependencies" ]; then printf '  Installer dependencies (apt): %s\n' "$dependencies"; fi
   if on_selected runner; then printf '  runner: dedicated ghrunner account + system service; repository %s.\n' "${GH_RUNNER_REPO:-REQUIRED}"; fi
   if on_selected postgres; then printf '  postgres: local database service; peer-authenticated superuser role for %s.\n' "$TARGET_USER"; fi
   printf 'Existing tools and Tailscale installations are kept; sign-in stays manual.\n'
@@ -69,10 +83,9 @@ platform_run_module() {
   /bin/bash -eo pipefail -c '. "$1/lib/common.sh"; . "$1/$2"' _ "$REPO_ROOT" "$1"
 }
 platform_prepare() {
-  local packages='' item need_apt=0
+  local packages item need_apt=0
+  packages="$(platform_installer_dependencies)"
   for item in git tmux mosh; do if on_selected "$item"; then need_apt=1; fi; done
-  if on_selected bun && ! have unzip; then packages="$packages unzip"; fi
-  # curl is already needed to bootstrap; CA certificates are an apt prerequisite.
   if [ -n "$packages" ] || on_selected security || on_selected gh || on_selected tailscale || on_selected postgres || on_selected runner; then need_apt=1; fi
   if [ "$need_apt" = 1 ]; then
     if [ -n "$SUDO" ]; then "$SUDO" -v || return 1; fi
