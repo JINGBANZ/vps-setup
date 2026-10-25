@@ -1,258 +1,192 @@
-# Mac mini as an always-on development machine
+# Mac mini server installation
 
-The mini keeps your repos, runtimes and agent sessions. Your laptop connects
-over SSH and can disconnect while work continues inside tmux. Screen Sharing
-is available for occasional desktop access. VS Code is not needed.
+Run setup on the Mac mini as your normal administrator user, **without sudo**.
+It installs missing development tools and optionally configures your shell.
+It does not configure SSH, Screen Sharing, power, credentials or network access.
+Your existing Tailscale installation is kept, including its service state.
 
-## First setup, on the mini
+## Start
 
-1. Finish macOS setup and sign in to your normal administrator account. Connect
-   to your home Wi-Fi or Ethernet. Wi-Fi works; Ethernet avoids wireless dropouts
-   and is preferable when testing recovery after a reboot.
-2. In Terminal, run `xcode-select --install` if Command Line Tools are missing.
-   Finish Apple's installer before continuing. Use a macOS version supported by
-   [Homebrew](https://docs.brew.sh/Installation).
-3. Clone this repo and run **without sudo**:
-
-   ```bash
-   git clone https://github.com/JINGBANZ/vps-setup.git
-   cd vps-setup
-   bash setup.sh
-   ```
-
-   Alternatively, download the bootstrap first so installer prompts have a
-   terminal available:
-
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh -o /tmp/vps-setup-bootstrap.sh
-   bash /tmp/vps-setup-bootstrap.sh
-   ```
-
-4. Open a new terminal, or run `source ~/.config/vps-setup/env.sh`.
-
-## Interactive onboarding and reruns
-
-The first run inventories tools and configuration before offering a numbered
-selection menu. Toggle numbers (for example `3,4`), or use `all`, `none`, or
-`defaults`. Press Enter to review the plan, then type `apply` to proceed. Nothing
-is installed or configured before this confirmation. The last successful
-selection is remembered as plain data; every run checks the machine again.
-
-| ID | Component | Initial default |
-| --- | --- | --- |
-| `tailscale` | Private network and startup configuration | Selected |
-| `ssh` | Remote Login / SSH setup guidance | Selected |
-| `mosh` | Terminal connection that tolerates Wi-Fi changes | Selected |
-| `tmux` | Sessions that survive laptop disconnects | Selected |
-| `shortcut` | `t NAME` session helper | Selected |
-| `git`, `gh` | Git and GitHub CLI; independent choices | Selected |
-| `codex`, `claude` | Native terminal agents; independent choices | Selected |
-| `node`, `bun` | Project runtimes; independent choices | Off |
-| `screen` | Built-in Screen Sharing guidance | Selected |
-
-The shortcut adds tmux as a dependency; Mosh adds Remote Login guidance.
-Homebrew is installed only when a selected missing package requires it. Existing
-usable tools are reused, including tools outside Homebrew. Detection includes
-versions/paths, Tailscale variant and readable authentication status, loaded
-Sharing services. A loaded service still needs its allowed
-users and actual remote access verified. Unreadable auth state is shown as
-`unknown`, not treated as signed out.
+Finish Apple's Command Line Tools installer before installing Homebrew packages:
 
 ```bash
-bash setup.sh --check                         # read-only inventory and address
+xcode-select --install
+
+git clone https://github.com/JINGBANZ/vps-setup.git
+cd vps-setup
+bash setup.sh
+```
+
+Use a macOS version supported by [Homebrew](https://docs.brew.sh/Installation).
+If Command Line Tools are already installed, skip that first command.
+
+```bash
+bash setup.sh --check                         # local inventory only
 bash setup.sh --select mosh,tmux,codex --dry-run
-bash setup.sh --select tailscale,mosh,tmux,shortcut,codex,claude,screen --yes
+bash setup.sh --select mosh,tmux,shortcut,codex,claude --yes
 bash setup.sh --select none --yes             # no changes
 ```
 
-`--yes` requires an explicit `--select` list. Without a terminal, use this
-explicit automation mode or a read-only command. Sudo may still request your
-password for selected system changes. These flags apply only to macOS; Linux
-rejects them rather than silently starting provisioning.
+`--yes` requires an explicit list and skips this script's confirmation. An upstream
+installer, notably Homebrew on first installation, can still request input or
+administrator authorization. Linux rejects these Mac-only flags.
 
-Deselecting skips a component; it does not uninstall it, remove existing
-shortcuts. Reruns do not deliberately upgrade tools,
-restart a loaded service, or repeat successful native installs. A failed
-selected agent/runtime produces a nonzero exit after the remaining steps;
-rerunning fills in the missing tool. Upgrades are separate maintenance work.
+## Menu: nine tools and two configuration choices
 
-Shell changes are kept in `~/.config/vps-setup/` and sourced by zsh and bash.
-Files are replaced only when their content differs; original modified files
-are backed up once as `*.vps-setup.bak`. Existing custom lines and the first
-existing Bash login profile are preserved. Exported `ZDOTDIR` is honored.
-Symlinked profiles are left intact with a warning: add
-`source ~/.config/vps-setup/env.sh` to their target yourself if needed.
-Authentication is left to you; the Mac installer does not capture it in a log.
+Every run redetects the local installation before applying saved choices.
 
-Power settings are entirely manual. In **System Settings > Energy**, review
-**Prevent automatic sleeping when the display is off** and restart after power
-failure if available. The installer does not read or modify power settings.
-Display sleep can remain enabled while the computer stays awake.
+| Local state | Menu behavior | What setup does |
+| --- | --- | --- |
+| Installed command passes its version check | **LOCKED**, no checkbox | Keep it, even outside Homebrew |
+| Tailscale app, daemon or formula present | **LOCKED**, no checkbox | Keep it without checking service/authentication state |
+| Existing command fails, formula lacks a command, or a known install path is unusable | **LOCKED**, manual repair | No reinstall or overwrite |
+| Missing tool | Selectable | Install only if selected |
+| Configuration matches | **LOCKED**, no checkbox | No rewrite |
+| Configuration needs updating | Selectable | Compare and write changed content |
+| Configuration needs changing through a symlink | **LOCKED**, manual repair | Preserve the symlink and target |
 
-If an earlier version changed power settings, this update does not undo them.
-Review them manually; the earlier `power-settings-before.txt` backup remains
-available if it was created. Saved selections migrate away from the
-removed component with a notice; an explicit `--select power` is rejected.
-The obsolete `MAC_ALWAYS_ON` variable is ignored.
+Toggle eligible numbers, use `all`, `none`, or `defaults`, then press Enter to
+review the plan. Type `apply` to proceed; anything else cancels. Locked entries
+cannot be selected or deselected, including through bulk commands or `--select`.
+Selecting an already installed tool alone does nothing.
 
-A new Tailscale install uses the Homebrew **formula** and a system LaunchDaemon.
-Existing GUI apps, user daemons and other installations are kept with startup
-review guidance. Competing installed/loaded variants block the selected
-Tailscale step before provisioning. Migration must be deliberate and local;
-the script never stops your existing connection to install another variant.
+| ID | Purpose / installation | Default if eligible |
+| --- | --- | --- |
+| `tailscale` | Homebrew formula for a new installation only | Selected |
+| `mosh` | Homebrew formula; installs the terminal server executable | Selected |
+| `tmux` | Homebrew formula; keeps sessions through disconnects | Selected |
+| `git` | Existing Apple/other Git is reused; otherwise Homebrew | Selected |
+| `gh` | GitHub CLI via Homebrew | Selected |
+| `codex` | Official native installer; independent of Node | Selected |
+| `claude` | Official native installer; independent of Node | Selected |
+| `node` | Existing Node reused; otherwise nvm and Node LTS | Off |
+| `bun` | Official native installer | Off |
+| `shortcut` | Configure `t NAME` and create `WORKSPACE_DIR` | Selected |
+| `shell` | Configure PATH and managed zsh/bash initialization | Selected |
 
-See [the visual design](design.html) for network and session graphs. Its
-onboarding simulation uses example data; `--check` reports the real machine.
+The last two entries appear in a separate **Configuration** section. A selected
+shortcut requires tmux: a missing tmux is added, while a broken tmux blocks the
+shortcut. Selected tools/shortcut add shell integration when it is not blocked,
+so new commands can be found in future shells. The plan shows this dependency;
+configuration can be scheduled even if it currently matches, because installing
+Homebrew or nvm can change the required initialization. If its final content
+matches, the file is not rewritten.
 
-## Enable SSH and optional Screen Sharing
+Homebrew is **not a separate optional module**. It is reused, or installed once
+when selected missing `tailscale`, `mosh`, `tmux`, `git` or `gh` requires it.
+A broken Homebrew blocks that plan with a manual repair message. Native agents,
+Node/Bun and configuration alone do not install Homebrew.
 
-Open **System Settings > General > Sharing** on the mini:
+### What runs under the hood
 
-- Turn on **Remote Login** and set **Allow access for: Only these users**, adding
-  your account. This is the Mac's built-in SSH server.
-- Turn on **Screen Sharing** if you want desktop access, again allowing only
-  your account. Apple's Screen Sharing and Remote Management are separate
-  options and cannot both be enabled simultaneously.
+`setup.sh` dispatches to `macos/setup.sh`, which uses `macos/lib.sh` and shared
+`lib/common.sh`. It does **not** run the Linux module directory in order.
 
-These settings remain manual: Apple protects them, and `kickstart` cannot
-enable Screen Sharing on modern macOS. Setup does not bypass privacy controls,
-change the SSH port/password policy, or claim these services are already on.
+| Selected work | Implementation |
+| --- | --- |
+| Missing formula tools | `macos/setup.sh`: one `brew install --formula TOOL` per selected tool |
+| Node or Bun | `modules/60-node-bun.sh`, separately per selected runtime with independent flags |
+| Codex or Claude | `modules/70-agents.sh`, separately per selected agent with independent flags |
+| Session shortcut | `modules/80-tmux.sh` generates a temporary desired file; changed content is applied |
+| Shell integration | `macos/lib.sh`: compare and update managed initialization |
 
-Install the normal [Tailscale app](https://tailscale.com/download) on your laptop
-and sign in to the same tailnet. On the mini:
+Thus the amount of installation work depends on selection and detected state,
+not a fixed count of modules. Read-only inventory also generates a temporary
+shortcut for comparison, but does not persist it or install anything.
 
-```bash
-sudo tailscale up
-tailscale ip -4
-gh auth login
-claude
-codex
-```
+## Reruns and failures
 
-Each agent needs its own sign-in. Authenticate interactively after setup, so
-authentication links/codes do not enter the setup log. If browser callbacks
-are awkward over SSH, do the first sign-in locally or through Screen Sharing.
+Installed tools are locked even when an older saved choice selected them.
+Tools are rechecked immediately before installation as well. This script does
+not request upgrades, start/restart services, migrate Tailscale variants, or
+remove tools when deselected. Homebrew automatic update/install-upgrade is
+disabled for these installation calls; dependencies required by a new formula
+can still be installed by Homebrew. Upstream native installers manage their
+own installation files and may have their own update behavior.
 
-Use ordinary macOS SSH over Tailscale; `tailscale up --ssh` is not needed.
-Configure your tailnet access rules to permit your laptop to reach the mini's
-SSH (TCP 22), Mosh (UDP 60000–61000), and Screen Sharing (TCP 5900) ports,
-as well as the relevant host firewall permissions. Home-router port forwarding
-is normally unnecessary. These macOS services can also be reachable on your local LAN;
-Tailscale installation alone does not restrict them to the tailnet.
+The final summary reports **Installed**, **Already present**, **Configured**,
+**Configuration current**, **Skipped**, **Failed** or **Manual repair needed**.
+Selected install failures produce a nonzero exit after other selected work is
+attempted; failed choices are not saved. A pre-existing broken item is locked
+and reported for manual repair, rather than attempted as an installation. An
+inventory or no-op run can therefore exit successfully while reporting manual
+repair needs. Rerun after addressing the failure; working tools will be locked.
 
-## Addresses and direct connections
+Shell changes live in `~/.config/vps-setup/`. Originals are backed up once as
+`*.vps-setup.bak`; matching files are untouched. Custom profile lines and the
+first existing Bash login profile are preserved. Exported `ZDOTDIR` is honored.
+Symlinked files needing updates remain manual. Open a new shell after changes.
+`WORKSPACE_DIR` must be absolute and defaults to `~/workspace`.
 
-After sign-in, Tailscale automatically assigns the mini a stable private IP.
-The script does not choose an IP. Re-run `bash setup.sh --check` after
-`sudo tailscale up` to display a verified address. If CLI status needs elevated
-permission, use `sudo tailscale status` and `sudo tailscale ip -4` yourself.
-With MagicDNS enabled, the machine name also works. Your laptop must be in the
-same authorized tailnet, independently of either Mac's Apple ID.
+Saved `ssh`, `screen` and `power` choices are retired with a notice; explicitly
+requesting them with `--select` is an error. `MAC_ALWAYS_ON` is ignored.
+`MAC_TAILSCALE=0` deselects missing Tailscale before the menu; review the final plan.
+Earlier power changes are not undone; any old power-settings backup is retained.
 
-Connections initially use a relay while Tailscale tries NAT traversal. A direct
-connection becomes available when the two networks allow a working UDP path;
-it does not require the same Wi-Fi. Restrictive NAT/firewalls may keep it relayed.
-Both paths are encrypted and use the same Tailscale address. Check the actual
-route with `tailscale ping YOUR_MINI_NAME` or `tailscale status`.
+## Manual server checklist
 
-Screen Sharing itself is built into macOS and does not need this script.
-Tailscale supplies remote network reachability; macOS Sharing enables desktop
-access. Screen Sharing can work while the display is off, provided the computer
-is awake. System sleep suspends agent work; wake-on-network is not a substitute
-for an awake server.
+These are guidance only, outside the installation menu. Setup does not inspect
+or change them and performs no SSH, Mosh, Screen Sharing, authentication or
+network connection probes. `--check` reports local installation state, **not**
+a Tailscale address, sign-in status or a guarantee of remote reachability.
 
-## Daily use
+- **Remote Login / optional Screen Sharing:** enable in System Settings > General
+  > Sharing and choose allowed users. Already working SSH needs no installer step.
+- **Power:** choose sleep and power-failure behavior yourself in System Settings
+  > Energy. The script neither reads nor changes power settings.
+- **New Homebrew Tailscale only:** when ready, follow the official service setup:
+  `sudo brew services start tailscale`, then `sudo tailscale up`. Setup installs
+  the formula but leaves service startup and sign-in to you. If Tailscale already
+  works, keep that installation; these commands are not instructions to migrate it.
+- **Accounts:** authenticate GitHub and selected agents separately as needed.
+  Existing credentials are preserved; setup does not query authentication status.
+- **Restart recovery:** tmux does not preserve live processes through a Mac reboot.
+  Save work to disk. FileVault unlock and service startup remain manual operational
+  considerations, outside installation verification.
 
-Replace the username/IP with your mini's account and `tailscale ip -4` output:
+No PostgreSQL, Actions runner, disk monitoring, firewall or Linux service module
+runs on the Mac. `DEV_POSTGRES=1` or a nonempty `GH_RUNNER_REPO` produces an error.
 
-```bash
-mosh YOUR_MAC_USER@100.x.y.z
-t my-task
-cd ~/workspace/your-repo
-codex                          # or claude
-```
+## Session shortcuts
 
-Detach with **Ctrl-b, then d**. You can close your laptop and later reconnect
-with Mosh and `t my-task`. Mosh uses SSH to authenticate, then UDP for the
-terminal. Install Mosh on the laptop too; keep SSH for file transfers, port
-forwarding and fallback access. A running Mosh client can resume after Wi-Fi
-roaming; closing that client requires a new connection and tmux reattachment. Use **Ctrl-b, then s** to switch tasks. Task names may
-contain letters, numbers, underscores and hyphens. Your workspace directory is
-created during setup; spaces and apostrophes in its path are supported.
+After configuring the shortcut and opening a new shell:
 
-Install your laptop's **public** SSH key in the mini's `~/.ssh/authorized_keys`
-for key-based login. Keep the private key on your laptop. Use `chmod 700 ~/.ssh`
-and `chmod 600 ~/.ssh/authorized_keys` on the mini, then test a second login
-before changing any authentication settings.
+| Command / keys | Action |
+| --- | --- |
+| `t` | Create/attach session `main` |
+| `t my-task` | Create/attach a named session; switch to it if already inside tmux |
+| Ctrl-b, then d | Detach while its processes continue |
+| Ctrl-b, then s | Pick another session |
+| `tmux ls` | List sessions |
 
-For desktop access from another Mac, open the **Screen Sharing** app and enter
-the mini's Tailscale IP or MagicDNS machine name. Authenticate with the mini's
-local macOS username/password; the two Macs may use different Apple IDs. Closing Screen
-Sharing disconnects the viewer; avoid logging the Mac user out if you want GUI
-applications to keep running. Desktop responsiveness depends on network latency
-and the mini's internet upload speed.
+Task names allow letters, numbers, underscores and hyphens. New sessions start
+in `WORKSPACE_DIR`; tmux needs this directory to exist. Mac shortcut setup creates
+it. Sessions survive terminal disconnection while the tmux server and Mac keep
+running. They do not survive reboot, shutdown, or termination of the tmux server.
 
-## Unattended operation and recovery
+## Official guidance and validation
 
-- The Homebrew Tailscale daemon starts at system boot after the disk is unlocked,
-  before a GUI user logs in. The regular macOS Tailscale app requires a login
-  session. Setup reuses a detected GUI or other daemon installation and reports that its
-  startup mode needs review; migrate locally if you need pre-login service. Do not run both.
-- Keep FileVault enabled. On Apple silicon with macOS 26+, Apple supports
-  unlocking FileVault over SSH after a restart when Remote Login is enabled and
-  the network is available. The mini's own Tailscale daemon cannot provide the
-  network path before its startup disk is unlocked. For remote recovery, use a
-  VPN on the home router or a separate always-on Tailscale subnet router to reach
-  the mini's LAN IP. Test your actual Wi-Fi/Ethernet configuration; ordinary
-  logged-in Wi-Fi access does not prove pre-unlock access works. Keep a local
-  recovery option until that test succeeds.
-- tmux preserves sessions across disconnects, **not crashes or reboots**. Use
-  application-specific `launchd` services for workloads that must start again
-  automatically; setup does not auto-launch agents or restore running tasks.
-- Test SSH and Screen Sharing from a phone hotspot, then test after a reboot
-  without a local GUI login. Test reconnecting after a router restart as well.
-- For a trusted unattended mini, consider disabling its Tailscale device-key
-  expiry in the admin console, while keeping access restricted to your devices.
-- Keep macOS, Homebrew and your agents updated. Back up your workspace. A UPS
-  should power the mini **and** router if you need continuity through outages.
+Open [the visual walkthrough](design.html) for a sample menu, dependency graph
+and source links alongside each implementation choice. Sample state is illustrative;
+run `--check` on your Mac for its actual local inventory.
 
-The script does not disable FileVault, enable automatic login, change Wi-Fi
-credentials, open public router ports, or change your macOS firewall/update
-preferences. Linux's UFW, fail2ban, disk guard, optional PostgreSQL and Actions
-runner modules are not run on macOS. Setting `DEV_POSTGRES` or `GH_RUNNER_REPO`
-on macOS produces an error instead of silently skipping the requested service.
+| Area | Source of truth | Repository choice |
+| --- | --- | --- |
+| Homebrew | [Installation](https://docs.brew.sh/Installation) | Download official installer to a temporary file with `curl -o "$installer"`, execute `/bin/bash "$installer"`, then remove it; download failure prevents execution |
+| Tailscale | [macOS variants](https://tailscale.com/docs/concepts/macos-variants), [daemon setup](https://github.com/tailscale/tailscale/wiki/Tailscaled-on-macOS) | Formula only when absent; startup/sign-in manual; preserve existing variants |
+| Mosh | [Official installation](https://mosh.org/#getting) | Homebrew package; SSH/UDP configuration outside this installer |
+| tmux | [Getting started](https://github.com/tmux/tmux/wiki/Getting-Started) | Homebrew package plus this repository's optional `t` helper |
+| Git / GitHub CLI | [Git macOS](https://git-scm.com/downloads/mac), [GitHub CLI](https://github.com/cli/cli#installation) | Reuse working commands; otherwise Homebrew |
+| Agents | [Codex CLI](https://developers.openai.com/codex/cli), [Claude setup](https://code.claude.com/docs/en/setup) | Official native installers; no Node dependency imposed |
+| Runtimes | [nvm v0.40.8](https://github.com/nvm-sh/nvm/tree/v0.40.8), [Bun](https://bun.com/docs/installation) | Optional; fresh nvm defaults to pinned v0.40.8, overridable with `NVM_VERSION`; existing nvm reused |
+| Manual settings | [Apple Remote Login](https://support.apple.com/guide/mac-help/mchlp1066/mac), [Screen Sharing](https://support.apple.com/guide/mac-help/mh11848/mac), [Energy](https://support.apple.com/guide/mac-help/mchlp1168/mac) | Instructions only |
 
-## Settings and checks
+The nvm default is shared with Linux, so fresh Linux nvm installations also use
+v0.40.8. The locked menu, selection dependencies and backup policy are repository
+behavior, not claims of upstream endorsement.
 
-```bash
-WORKSPACE_DIR="$HOME/Dev Projects" bash setup.sh
-bash setup.sh --select codex,claude --dry-run
-bash setup.sh --check              # read-only installed state and assigned IP
-
-sudo brew services info tailscale
-sudo tailscale status
-pmset -g custom
-```
-
-Running setup again fills in missing tools and refreshes managed shell snippets.
-It does not deliberately upgrade installed packages or restart an already
-loaded Tailscale service. `MAC_TAILSCALE=0` deselects Tailscale before the
-menu; review the final plan. Homebrew formulae do not self-update: use
-`brew update` and `brew upgrade` during a maintenance window, then check the
-Tailscale service. A loaded service is not proof of authenticated connectivity;
-check `tailscale status` and an actual remote connection.
-
-## References
-
-- [Tailscale connection types](https://tailscale.com/docs/reference/connection-types)
-- [Tailscale IP assignment](https://tailscale.com/docs/concepts/ip-and-dns-addresses)
-- [Mosh](https://mosh.org/)
-- [tmux sessions](https://github.com/tmux/tmux/wiki/Getting-Started)
-- [Tailscale macOS variants](https://tailscale.com/docs/concepts/macos-variants)
-- [Tailscaled on macOS, including Homebrew service setup](https://github.com/tailscale/tailscale/wiki/Tailscaled-on-macOS)
-- [Apple: Remote Login](https://support.apple.com/guide/mac-help/mchlp1066/mac)
-- [Apple: Screen Sharing](https://support.apple.com/guide/mac-help/mh11848/mac)
-- [Apple: Remote Management and kickstart limitations](https://support.apple.com/guide/remote-desktop/apd8b1c65bd/mac)
-- [Apple: FileVault over SSH](https://support.apple.com/guide/security/sec8447f5049/web)
-- [Codex CLI](https://developers.openai.com/codex/cli)
-- [Claude Code setup](https://code.claude.com/docs/en/setup)
+`bash tests/test-macos.sh` runs the real entrypoint with isolated fake installers,
+commands and HOME, including a real PTY menu. CI runs it on Linux and macOS
+(Apple Bash 3.2), plus shell lint and Linux apt regressions. These tests verify
+selection, failure/retry and rerun behavior without installing software or changing
+system settings. They do not replace a real installation trial on a spare Mac.

@@ -1,41 +1,51 @@
 #!/usr/bin/env bash
-# Helpers for macOS; sourcing this file performs no actions.
-COMPONENTS=(tailscale ssh mosh tmux shortcut git gh codex claude node bun screen)
-LABELS=('Tailscale' 'Remote Login guide' 'Mosh' 'tmux' 'Session shortcut: t' 'Git' 'GitHub CLI' 'Codex' 'Claude Code' 'Node.js / nvm' 'Bun' 'Screen Sharing guide')
+# macOS server installation helpers; compatible with Apple Bash 3.2.
+COMPONENTS=(tailscale mosh tmux git gh codex claude node bun shortcut shell)
+LABELS=('Tailscale' 'Mosh' 'tmux' 'Git' 'GitHub CLI' 'Codex' 'Claude Code' 'Node.js / nvm' 'Bun' 'Session shortcut: t' 'Shell integration')
+STATES=(); DETAILS=(); RESULTS=()
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 mac_usage() {
   cat <<'EOF'
-Usage on macOS: bash setup.sh [options]  (run WITHOUT sudo)
-  No options          Detect tools, choose components, review, then confirm.
-  --check             Read-only inventory and Tailscale IP.
-  --dry-run           Read-only plan using defaults or last saved choices.
-  --select LIST       Exact comma-separated component IDs, or none.
+Usage on macOS: bash setup.sh [options] (without sudo)
+  --check             Read-only local installation inventory.
+  --dry-run           Read-only plan; no installation or connection probes.
+  --select LIST       Comma-separated IDs, or none. Installed items stay locked.
   --yes               Apply an explicit --select list without menu confirmation.
-  --help              Show this help.
-Components:
-  tailscale,ssh,mosh,tmux,shortcut,git,gh,codex,claude,node,bun,screen
-Node and Bun default off. SSH and Screen Sharing are guided macOS settings.
-Deselecting means skip; existing software and settings are kept.
-Examples:
-  bash setup.sh --select mosh,tmux,codex --dry-run
-  bash setup.sh --select mosh,tmux,codex --yes
+  --help              Show help.
+Tools: tailscale,mosh,tmux,git,gh,codex,claude,node,bun
+Configuration: shortcut,shell
+Node and Bun default off. Only missing tools and outdated configuration are selectable.
+SSH, Screen Sharing, power and sign-in are manual checklist items.
 EOF
 }
 mac_selected() { case "$SELECTED" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 mac_select() { if ! mac_selected "$1"; then SELECTED="$SELECTED$1 "; fi; }
 mac_deselect() { SELECTED="${SELECTED// $1 / }"; }
+mac_selection_words() (
+  # Split plain selection data without expanding patterns. Keep noglob inside
+  # this subshell: nvm needs normal filename expansion to discover versions.
+  set -f
+  for word in ${1//,/ }; do printf '%s\n' "$word"; done
+)
 mac_parse_selection() {
-  local value="$1" id known item
+  local id item known
   SELECTED=' '
-  [ "$value" != none ] || return 0
-  [ -n "$value" ] || die 'Empty selection; use none explicitly'
-  for id in ${value//,/ }; do
-    [ "$id" != power ] || die 'power was removed; configure power manually in System Settings'
+  [ "$1" != none ] || return 0
+  [ -n "$1" ] || die 'Empty selection; use none'
+  while IFS= read -r id; do
+    case "$id" in ssh|screen|power) die "$id is manual; remove it from --select" ;; esac
     known=0
     for item in "${COMPONENTS[@]}"; do [ "$id" != "$item" ] || known=1; done
     [ "$known" = 1 ] || die "Unknown component: $id"
     mac_select "$id"
-  done
+  done < <(mac_selection_words "$1")
+}
+mac_load_nvm() {
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh" --no-use
+    nvm use --silent default >/dev/null 2>&1 || true
+  fi
 }
 mac_find_brew() {
   BREW_BIN="$(command -v brew || true)"
@@ -44,149 +54,169 @@ mac_find_brew() {
       if [ -x "$candidate" ]; then BREW_BIN="$candidate"; break; fi
     done
   fi
-  if [ -n "$BREW_BIN" ]; then eval "$("$BREW_BIN" shellenv)"; fi
+  BREW_BROKEN=0
+  if [ -n "$BREW_BIN" ]; then
+    if "$BREW_BIN" --version >/dev/null 2>&1; then eval "$("$BREW_BIN" shellenv)"
+    else BREW_BROKEN=1; fi
+  fi
 }
 mac_tool() {
-  local name="$1" bin flag=--version
-  bin="$(command -v "$name" || true)"
+  local bin flag=--version
+  bin="$(command -v "$1" || true)"
   [ -n "$bin" ] || return 1
-  # Apple's git placeholder can launch the CLT UI; do not run it in discovery.
   [ "$bin:$CLT_READY" != /usr/bin/git:0 ] || return 1
-  [ "$name" != tmux ] || flag=-V
+  [ "$1" != tmux ] || flag=-V
   "$bin" "$flag" >/dev/null 2>&1 || return 1
-  printf '%s\n' "$bin"
+  printf '%s' "$bin"
+}
+mac_detect_tool() {
+  local id="$1" bin flag=--version candidate
+  DETECTED=missing; DETAIL='Not installed'
+  # An existing Tailscale installation is never migrated or restarted.
+  if [ "$id" = tailscale ]; then
+    for candidate in /Applications/Tailscale.app "$HOME/Applications/Tailscale.app" \
+      /Library/LaunchDaemons/homebrew.mxcl.tailscale.plist \
+      /Library/LaunchDaemons/com.tailscale.tailscaled.plist \
+      "$HOME/Library/LaunchAgents/homebrew.mxcl.tailscale.plist"; do
+      if [ -e "$candidate" ] || [ -L "$candidate" ]; then DETECTED=installed; DETAIL="Present: $candidate (kept; no service/auth checks)"; return; fi
+    done
+    if command -v tailscaled >/dev/null 2>&1; then
+      DETECTED=installed; DETAIL='tailscaled present (kept; no service/auth checks)'; return
+    fi
+  fi
+  bin="$(command -v "$id" || true)"
+  if [ "$id:$bin:$CLT_READY" = git:/usr/bin/git:0 ]; then
+    DETAIL='Apple git placeholder; finish Command Line Tools'; return
+  fi
+  if [ -n "$bin" ]; then
+    if mac_tool "$id" >/dev/null; then
+      [ "$id" != tmux ] || flag=-V
+      DETECTED=installed; DETAIL="$("$bin" "$flag" 2>&1 | head -n 1) [$bin]"
+    else DETECTED=broken; DETAIL="Unusable: $bin; repair manually"; fi
+    return
+  fi
+  for candidate in "$HOME/.local/bin/$id" "$HOME/.bun/bin/$id"; do
+    if [ -e "$candidate" ] || [ -L "$candidate" ]; then DETECTED=broken; DETAIL="Unusable: $candidate; repair manually"; return; fi
+  done
+  if [ -n "$BREW_BIN" ] && [ "$BREW_BROKEN" = 0 ] && "$BREW_BIN" list --formula "$id" >/dev/null 2>&1; then
+    if [ "$id" = tailscale ]; then DETECTED=installed; DETAIL='Homebrew formula present (kept, even if stopped)'
+    else DETECTED=broken; DETAIL='Formula present but command unavailable; repair PATH manually'; fi
+  fi
+}
+mac_shortcut_file() {
+  local target="$1"
+  if [ -f "$CONFIG_DIR/tmux.sh" ]; then cp "$CONFIG_DIR/tmux.sh" "$target"; fi
+  ( TMUX_RC_FILE="$target"
+    # shellcheck source=modules/80-tmux.sh
+    . "$REPO_ROOT/modules/80-tmux.sh"
+  ) >/dev/null
+}
+mac_config_state() {
+  local id="$1" temp
+  DETECTED=update; DETAIL='Needs configuration'
+  if [ "$id" = shortcut ]; then
+    if [ -L "$CONFIG_DIR/tmux.sh" ]; then DETECTED=broken; DETAIL='Symlink preserved; configure its target manually'; return; fi
+    temp="$(mktemp)"
+    mac_shortcut_file "$temp"
+    if cmp -s "$temp" "$CONFIG_DIR/tmux.sh" && [ -d "$WORKSPACE_DIR" ]; then DETECTED=current; DETAIL='Configuration current'; fi
+    rm -f "$temp"
+  else
+    CONFIG_CHECK=1; CONFIG_DIRTY=0; CONFIG_BLOCKED=0
+    mac_shell_config
+    CONFIG_CHECK=0
+    if [ "$CONFIG_BLOCKED" = 1 ]; then DETECTED=broken; DETAIL='Symlinked profile needs manual integration'
+    elif [ "$CONFIG_DIRTY" = 0 ]; then DETECTED=current; DETAIL='Configuration current'; fi
+  fi
 }
 mac_discover() {
-  CLT_READY=0
-  if xcode-select -p >/dev/null 2>&1; then CLT_READY=1; fi
+  local i=0 id
+  CLT_READY=0; if xcode-select -p >/dev/null 2>&1; then CLT_READY=1; fi
   mac_find_brew
   export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
   export NVM_DIR="${NVM_DIR:-$([ -z "${XDG_CONFIG_HOME:-}" ] && printf %s "$HOME/.nvm" || printf %s "$XDG_CONFIG_HOME/nvm")}"
-  if [ -s "$NVM_DIR/nvm.sh" ]; then
-    # shellcheck disable=SC1091
-    . "$NVM_DIR/nvm.sh" --no-use
-    nvm use --silent default >/dev/null 2>&1 || true
-  fi
-  mac_detect_tailscale
-}
-mac_detect_tailscale() {
-  local app gui=0 system_brew=0 system_other=0 user_service=0
-  TS_BIN="$(command -v tailscale || true)"
-  for app in /Applications/Tailscale.app "$HOME/Applications/Tailscale.app"; do
-    if [ -d "$app" ]; then
-      gui=1
-      if [ -z "$TS_BIN" ] && [ -x "$app/Contents/MacOS/Tailscale" ]; then TS_BIN="$app/Contents/MacOS/Tailscale"; fi
-    fi
-  done
-  if launchctl print system/homebrew.mxcl.tailscale >/dev/null 2>&1; then system_brew=1; fi
-  if launchctl print system/com.tailscale.tailscaled >/dev/null 2>&1; then system_other=1; fi
-  if launchctl print "gui/$(id -u)/homebrew.mxcl.tailscale" >/dev/null 2>&1; then user_service=1; fi
-  TS_KIND=missing
-  if [ "$((gui+system_brew+system_other+user_service))" -gt 1 ]; then TS_KIND=conflict
-  elif [ "$gui" = 1 ]; then TS_KIND=gui
-  elif [ "$system_brew" = 1 ]; then TS_KIND=system
-  elif [ "$system_other" = 1 ]; then TS_KIND=external
-  elif [ "$user_service" = 1 ]; then TS_KIND=user
-  elif [ -n "$BREW_BIN" ] && "$BREW_BIN" list --formula tailscale >/dev/null 2>&1; then TS_KIND=stopped
-  elif [ -n "$TS_BIN" ]; then TS_KIND=external
-  fi
-  TS_AUTH=unknown
-  if [ -n "$TS_BIN" ]; then
-    TS_AUTH="$("$TS_BIN" status --json 2>/dev/null | plutil -extract BackendState raw -o - - 2>/dev/null)" || TS_AUTH=unknown
-  fi
-}
-mac_status() {
-  local id="$1" bin version label flag=--version
-  case "$id" in
-    tailscale) printf '%s; authentication=%s' "$TS_KIND" "$TS_AUTH" ;;
-    ssh|screen)
-      label=com.openssh.sshd
-      [ "$id" != screen ] || label=com.apple.screensharing
-      if launchctl print "system/$label" >/dev/null 2>&1; then printf 'Service loaded; verify allowed users'
-      else printf 'Built in; check Sharing settings'; fi ;;
-    shortcut)
-      if [ -f "$CONFIG_DIR/tmux.sh" ]; then printf 'Managed shortcut present'
-      else printf 'Not configured'; fi ;;
-    *)
-      if bin="$(mac_tool "$id")"; then
-        [ "$id" != tmux ] || flag=-V
-        version="$("$bin" "$flag" 2>&1 | head -n 1)" || version=unknown
-        printf '%s [%s]' "$version" "$bin"
-      else printf 'Missing / unavailable'; fi ;;
-  esac
-}
-mac_inventory() {
-  printf '\nMac mini setup — detected state (read-only)\n'
-  printf 'Homebrew: %s\nCommand Line Tools ready: %s\n' "${BREW_BIN:-missing}" "$CLT_READY"
-  local i=0
+  mac_load_nvm
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
-    printf '  %-26s %s\n' "${LABELS[$i]}" "$(mac_status "${COMPONENTS[$i]}")"
+    id="${COMPONENTS[$i]}"
+    case "$id" in shortcut|shell) mac_config_state "$id" ;; *) mac_detect_tool "$id" ;; esac
+    STATES[$i]="$DETECTED"; DETAILS[$i]="$DETAIL"; RESULTS[$i]=''
     i=$((i+1))
   done
 }
-mac_menu() {
-  local i=0 mark
-  printf '\nChoose components (previous choices are remembered):\n'
+mac_eligible() { case "${STATES[$1]}" in missing|update) return 0 ;; *) return 1 ;; esac; }
+mac_normalize() {
+  local i=0 id
+  mac_config_state shell
+  STATES[10]="$DETECTED"; DETAILS[10]="$DETAIL"
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
-    mark=' '; if mac_selected "${COMPONENTS[$i]}"; then mark=x; fi
-    printf ' %2s [%s] %-26s %s\n' "$((i+1))" "$mark" "${LABELS[$i]}" "$(mac_status "${COMPONENTS[$i]}")"
+    if ! mac_eligible "$i"; then mac_deselect "${COMPONENTS[$i]}"; fi
+    i=$((i+1))
+  done
+  if mac_selected shortcut; then
+    case "${STATES[2]}" in missing) mac_select tmux ;; broken) mac_deselect shortcut; printf 'Shortcut skipped: repair existing tmux manually.\n' ;; esac
+  fi
+  # Selected tools can change PATH initialization; preview that configuration work.
+  for id in tailscale mosh tmux git gh codex claude node bun shortcut; do
+    if mac_selected "$id" && [ "${STATES[10]}" != broken ]; then
+      STATES[10]=update; DETAILS[10]='Needs configuration for selected installation'
+      mac_select shell
+      break
+    fi
+  done
+}
+mac_inventory() {
+  local i=0 mark
+  printf '\nLocal installation inventory (not connectivity verification)\n'
+  printf 'Homebrew dependency: %s\n' "${BREW_BIN:-not installed}"
+  while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
+    [ "$i" != 0 ] || printf '\nTools\n'
+    [ "$i" != 9 ] || printf '\nConfiguration\n'
+    if mac_eligible "$i"; then
+      mark=' '; if mac_selected "${COMPONENTS[$i]}"; then mark=x; fi
+      printf ' %2s [%s] %-22s %s\n' "$((i+1))" "$mark" "${LABELS[$i]}" "${DETAILS[$i]}"
+    else
+      printf ' %2s LOCKED %-22s %s — %s\n' "$((i+1))" "${LABELS[$i]}" "${STATES[$i]}" "${DETAILS[$i]}"
+    fi
     i=$((i+1))
   done
 }
 mac_plan() {
+  local i=0 id
   NEED_BREW=0
-  printf '\nPlan — only selected components:\n'
-  local id
-  for id in "${COMPONENTS[@]}"; do
-    if ! mac_selected "$id"; then continue; fi
-    case "$id" in
-      tailscale)
-        case "$TS_KIND" in
-          missing) NEED_BREW=1; printf '  tailscale: install Homebrew formula; start system service\n' ;;
-          stopped) printf '  tailscale: start existing Homebrew formula as system service\n' ;;
-          system) printf '  tailscale: keep loaded system service; verify sign-in\n' ;;
-          conflict) printf '  tailscale: BLOCKED — conflicting installations; resolve locally or deselect\n' ;;
-          *) printf '  tailscale: reuse %s installation; manual startup review (no migration)\n' "$TS_KIND" ;;
-        esac ;;
-      ssh|screen) printf '  %s: show macOS Sharing / allowed-user instructions\n' "$id" ;;
-      shortcut) printf '  shortcut: create workspace; compare/update managed t() helper\n' ;;
-      *)
-        if mac_tool "$id" >/dev/null; then printf '  %s: reuse existing tool (no upgrade)\n' "$id"
-        else
-          printf '  %s: install\n' "$id"
-          case "$id" in git|gh|tmux|mosh) NEED_BREW=1 ;; esac
-        fi ;;
-    esac
+  printf '\nPlan — selected eligible items only\n'
+  while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
+    id="${COMPONENTS[$i]}"
+    if mac_selected "$id"; then
+      case "$id" in
+        shortcut|shell) printf '  %s: configure/update (not software installation)\n' "$id" ;;
+        *) printf '  %s: install missing tool\n' "$id" ;;
+      esac
+      case "$id" in tailscale|git|gh|tmux|mosh) NEED_BREW=1 ;; esac
+    fi
+    i=$((i+1))
   done
   if [ "$NEED_BREW" = 1 ]; then printf '  Homebrew dependency: %s\n' "${BREW_BIN:-install once}"; fi
-  if [ "$SELECTED" != ' ' ]; then printf '  Compare managed shell configuration; back up changed files; save choices.\n'; fi
-  printf 'Deselected components are skipped. Sign-in and protected Sharing settings remain interactive.\n'
+  printf 'Existing tools and Tailscale services are kept. Power and Sharing are manual.\n'
 }
 mac_ensure_brew() {
+  local installer
+  [ "$BREW_BROKEN" = 0 ] || die 'Existing Homebrew is unusable; repair it manually'
   if [ -z "$BREW_BIN" ]; then
-    local installer
     installer="$(mktemp)"
-    curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$installer"
-    /bin/bash "$installer"
+    if ! curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$installer"; then rm -f "$installer"; return 1; fi
+    if ! /bin/bash "$installer"; then rm -f "$installer"; return 1; fi
     rm -f "$installer"
     mac_find_brew
   fi
-  [ -n "$BREW_BIN" ] || die 'Homebrew not found after installation; rerun after fixing it'
-}
-mac_tailscale() {
-  case "$TS_KIND" in
-    missing|stopped)
-      if [ "$TS_KIND" = missing ]; then "$BREW_BIN" install --formula tailscale; fi
-      sudo "$BREW_BIN" services start tailscale
-      launchctl print system/homebrew.mxcl.tailscale >/dev/null 2>&1 || die 'Tailscale service did not load; check sudo brew services info tailscale, then rerun' ;;
-    system) skip 'Tailscale system service (already loaded)' ;;
-    *) warn "Keeping $TS_KIND Tailscale. Review pre-login startup locally; do not run a second variant." ;;
-  esac
-  mac_detect_tailscale
+  [ -n "$BREW_BIN" ] && [ "$BREW_BROKEN" = 0 ]
 }
 mac_write() {
   local source="$1" target="$2" stage
   if cmp -s "$source" "$target"; then return 0; fi
+  if [ "${CONFIG_CHECK:-0}" = 1 ]; then
+    CONFIG_DIRTY=1
+    [ ! -L "$target" ] || CONFIG_BLOCKED=1
+    return 0
+  fi
   if [ -L "$target" ]; then
     warn "Keeping symlink $target; apply the managed setup to its target manually."
     return 0
@@ -222,9 +252,9 @@ mac_shell_config() {
     printf -v nvm_quote '%q' "$NVM_DIR"
     printf 'export NVM_DIR=%s\n[ ! -s "$NVM_DIR/nvm.sh" ] || . "$NVM_DIR/nvm.sh"\n' "$nvm_quote" >> "$env_tmp"
   fi
-  if [ -f "$CONFIG_DIR/tmux.sh" ]; then
+  if [ -f "$CONFIG_DIR/tmux.sh" ] || mac_selected shortcut; then
     printf -v tmux_quote '%q' "$CONFIG_DIR/tmux.sh"
-    printf '. %s\n' "$tmux_quote" >> "$env_tmp"
+    printf '[ ! -f %s ] || . %s\n' "$tmux_quote" "$tmux_quote" >> "$env_tmp"
   fi
   mac_write "$env_tmp" "$env_file"
   rm -f "$env_tmp"
@@ -234,7 +264,7 @@ mac_shell_config() {
   for profile in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
     if [ -f "$profile" ]; then bash_profile="$profile"; break; fi
   done
-  mkdir -p "${ZDOTDIR:-$HOME}"
+  if [ "${CONFIG_CHECK:-0}" != 1 ]; then mkdir -p "${ZDOTDIR:-$HOME}"; fi
   for profile in "${ZDOTDIR:-$HOME}/.zprofile" "${ZDOTDIR:-$HOME}/.zshrc" "$bash_profile" "$HOME/.bashrc"; do
     profile_tmp="$(mktemp)"
     if [ -f "$profile" ]; then sed '/ # vps-setup:macos$/d' "$profile" > "$profile_tmp"; fi
@@ -243,36 +273,30 @@ mac_shell_config() {
     rm -f "$profile_tmp"
   done
 }
-mac_addresses() {
-  local ip
-  if [ -n "$TS_BIN" ] && [ "$TS_AUTH" = Running ]; then
-    ip="$("$TS_BIN" ip -4 2>/dev/null)" || ip=''
-    if [ -n "$ip" ]; then
-      printf '\nTailscale IPv4: %s\nTerminal: mosh %s@%s\nScreen Sharing address: %s\n' "$ip" "$TARGET_USER" "$ip" "$ip"
-      return 0
-    fi
-  fi
-  printf '\nTailscale address not verified. Finish sign-in, then rerun bash setup.sh --check.\n'
+
+mac_manual() {
+  printf '\nManual steps (not performed or tested):\n'
+  printf '  • System Settings > General > Sharing: Remote Login / optional Screen Sharing; choose allowed users.\n'
+  printf '  • System Settings > Energy: choose sleep and power-failure settings yourself.\n'
+  printf '  • For a NEW Homebrew Tailscale install only, start it when ready: sudo brew services start tailscale.\n'
+  printf '  • Sign in to Tailscale, GitHub and selected agents if needed; keep existing credentials.\n'
+  printf '  • Open a new shell after configuration changes. tmux sessions do not survive reboots.\n'
 }
-mac_finish() {
-  printf '\nOpen a new terminal to load managed shell configuration.\n'
-  if mac_selected ssh; then printf 'Remote Login: System Settings > General > Sharing; allow only your account.\n'; fi
-  if mac_selected screen; then printf 'Screen Sharing: enable it in Sharing; allow your local Mac account. Different Apple IDs are fine.\n'; fi
-  if mac_selected tailscale; then
-    case "$TS_KIND" in
-      system|stopped|missing) printf 'Tailscale sign-in, if needed: sudo tailscale up\n' ;;
-      *) printf 'Tailscale sign-in: use your existing app or daemon; review unattended startup.\n' ;;
-    esac
-    printf 'Install Tailscale on the laptop and join the same tailnet. Tailscale assigns the address automatically.\n'
-    mac_addresses
-  fi
-  if mac_selected gh; then printf 'GitHub authentication, if needed: gh auth login\n'; fi
-  if mac_selected codex; then printf 'Codex authentication, if needed: codex\n'; fi
-  if mac_selected claude; then printf 'Claude authentication, if needed: claude\n'; fi
-  if mac_selected mosh; then printf 'Install Mosh on the laptop too; SSH authenticates, then Mosh uses UDP.\n'; fi
-  if mac_selected shortcut; then printf 'On the mini: t my-task, then run your agent. Ctrl-b, d detaches.\n'; fi
-  printf 'tmux survives disconnects, not Mac reboots. Display sleep is fine; system sleep suspends work.\n'
-  printf 'Power settings are manual: System Settings > Energy; review automatic sleep and restart after power failure.\n'
-  printf 'Test external access and reboot recovery. FileVault unlock may need an independent network path.\n'
-  printf 'See macos/README.md for firewall rules, recovery and verification.\n'
+mac_summary() {
+  local i=0 result
+  printf '\nSummary\n'
+  while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
+    result="${RESULTS[$i]}"
+    if [ -z "$result" ]; then
+      case "${STATES[$i]}" in
+        installed) result='Already present — kept' ;;
+        current) result='Configuration current — kept' ;;
+        broken) result='Manual repair needed — not changed' ;;
+        *) result='Skipped' ;;
+      esac
+    fi
+    printf '  %-22s %s\n' "${LABELS[$i]}" "$result"
+    i=$((i+1))
+  done
+  mac_manual
 }
