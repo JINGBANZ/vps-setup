@@ -7,29 +7,34 @@ Your existing Tailscale installation is kept, including its service state.
 
 ## Start
 
-Finish Apple's Command Line Tools installer before installing Homebrew packages:
+Run this on the Mac mini in Terminal or an interactive SSH session, **without sudo**:
 
 ```bash
-xcode-select --install
-
-git clone https://github.com/JINGBANZ/vps-setup.git
-cd vps-setup
-bash setup.sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
 ```
 
-Use a macOS version supported by [Homebrew](https://docs.brew.sh/Installation).
-If Command Line Tools are already installed, skip that first command.
+Setup downloads to a temporary directory and cleans it up on exit. No clone or
+pull is needed; rerun the same command to install missing tools. Terminal input
+stays available for the menu and Homebrew prompts. Open a new terminal or SSH
+session afterward to load shell changes.
+
+If Command Line Tools are missing, run `xcode-select --install`, finish Apple's
+installer, then rerun setup. Homebrew is added only when needed and may request
+your administrator password. See [Homebrew's requirements](https://docs.brew.sh/Installation).
+
+To inspect or preview without installing anything, append `--` and the setup flags:
 
 ```bash
-bash setup.sh --check                         # local inventory only
-bash setup.sh --select mosh,tmux,codex --dry-run
-bash setup.sh --select mosh,tmux,shortcut,codex,claude --yes
-bash setup.sh --select none --yes             # no changes
+# Local inventory
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --check
+
+# Preview selected work
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select mosh,tmux,codex --dry-run
 ```
 
-`--yes` requires an explicit list and skips this script's confirmation. An upstream
-installer, notably Homebrew on first installation, can still request input or
-administrator authorization. Linux rejects these Mac-only flags.
+These commands still download setup temporarily. `--yes` requires an explicit
+`--select` list and skips the menu confirmation; upstream installers may still
+prompt. These flags are macOS-only.
 
 ## Menu: nine tools and two configuration choices
 
