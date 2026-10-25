@@ -25,7 +25,8 @@ class MacSetup(unittest.TestCase):
                         NVM_DIR=str(self.home / '.nvm'), XDG_CONFIG_HOME='',
                         PATH=f'{self.bin}:{os.environ["PATH"]}', TEST_STATE=str(self.state),
                         WORKSPACE_DIR=str(self.workspace), SUDO_USER='',
-                        GH_RUNNER_REPO='', DEV_POSTGRES='0', MAC_TAILSCALE='1')
+                        GH_RUNNER_REPO='', DEV_POSTGRES='0', MAC_TAILSCALE='1',
+                        VPS_SETUP_UI='plain')
         self.env.pop('MAC_ALWAYS_ON', None)
         self.script('uname', 'echo "${TEST_OS:-Darwin}"')
         self.script('id', 'case "$1" in -u) echo "${TEST_UID:-501}" ;; -un) echo tester ;; esac')

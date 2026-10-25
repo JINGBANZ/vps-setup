@@ -4,6 +4,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=macos/lib.sh
 . "$REPO_ROOT/macos/lib.sh"
+# shellcheck source=lib/terminal-ui.sh
+. "$REPO_ROOT/lib/terminal-ui.sh"
+# shellcheck source=macos/ui.sh
+. "$REPO_ROOT/macos/ui.sh"
+trap ui_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 SELECTED=' tailscale mosh tmux git gh codex claude shortcut shell '
 DEFAULTS="$SELECTED"
 explicit=0; assume_yes=0; dry_run=0; check_only=0
@@ -40,48 +47,45 @@ if [ "$explicit" = 0 ] && [ -f "$CONFIG_DIR/selection.txt" ]; then
   mac_parse_selection "${saved_current:-none}"
 fi
 [ "${MAC_TAILSCALE:-1}" = 1 ] || mac_deselect tailscale
+case "${VPS_SETUP_UI:-auto}" in auto|plain) ;; *) die 'VPS_SETUP_UI must be auto or plain' ;; esac
 mac_discover
 mac_normalize
-mac_inventory
-if [ "$check_only" = 1 ]; then mac_manual; exit 0; fi
+UI_MODE=plain
+if [ "$check_only" = 1 ]; then mac_inventory; mac_manual; exit 0; fi
 if [ "$dry_run:$assume_yes" = 0:0 ]; then
   if [ -t 0 ]; then exec 3<&0
   elif ( : < /dev/tty ) 2>/dev/null; then exec 3</dev/tty
   else die 'A terminal is required; use --check, --dry-run or explicit --select LIST --yes'
   fi
-  if [ "$explicit" = 0 ]; then
-    while :; do
-      printf 'Toggle eligible numbers, all / none / defaults, Enter to review, q to quit: '
-      IFS= read -r answer <&3 || die 'Input ended; no changes applied'
-      case "$answer" in
-        '') break ;;
-        q|quit) exit 0 ;;
-        all) SELECTED=" ${COMPONENTS[*]} " ;;
-        none) SELECTED=' ' ;;
-        defaults) SELECTED="$DEFAULTS" ;;
-        *) while IFS= read -r token; do
-          case "$token" in
-            1|2|3|4|5|6|7|8|9|10|11)
-              index=$((token-1)); item="${COMPONENTS[$index]}"
-              if ! mac_eligible "$index"; then printf '%s is locked; no change.\n' "$item"
-              elif mac_selected "$item"; then mac_deselect "$item"
-              else mac_select "$item"; fi ;;
-            *) printf 'Unknown selection: %s\n' "$token" ;;
-          esac
-        done < <(mac_selection_words "$answer") ;;
-      esac
-      mac_normalize
-      mac_inventory
-    done
+  if [ -t 2 ]; then exec 4>&2
+  elif [ -t 1 ]; then exec 4>&1
+  else exec 4>/dev/tty; fi
+  if ui_prepare; then
+    UI_MODE=gum
+    mac_locked_inventory
+    if [ "$explicit" = 0 ] && ! mac_gum_menu; then
+      printf 'Cancelled or menu interrupted; no changes applied.\n'; exit 0
+    fi
+  else
+    mac_inventory
+    if [ "$explicit" = 0 ] && ! mac_plain_menu; then exit 0; fi
   fi
+else
+  mac_inventory
 fi
 mac_normalize
 mac_plan
 if [ "$dry_run" = 1 ]; then mac_manual; exit 0; fi
 if [ "$assume_yes" = 0 ]; then
-  printf 'Type apply to continue, or anything else to cancel: '
-  IFS= read -r answer <&3 || die 'Input ended; no changes applied'
-  [ "$answer" = apply ] || { printf 'Cancelled; no changes applied.\n'; exit 0; }
+  if [ "$UI_MODE" = gum ]; then
+    if ! ui_gum confirm 'Apply this plan?' --affirmative Install --negative Cancel --default=false --timeout=0; then
+      printf 'Cancelled; no changes applied.\n'; exit 0
+    fi
+  else
+    printf 'Type apply to continue, or anything else to cancel: '
+    IFS= read -r answer <&3 || die 'Input ended; no changes applied'
+    [ "$answer" = apply ] || { printf 'Cancelled; no changes applied.\n'; exit 0; }
+  fi
 fi
 if [ "$SELECTED" = ' ' ]; then printf 'No eligible items selected; no changes applied.\n'; mac_summary; exit 0; fi
 if [ "$NEED_BREW" = 1 ]; then

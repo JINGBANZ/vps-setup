@@ -12,6 +12,8 @@ Usage on macOS: bash setup.sh [options] (without sudo)
   --select LIST       Comma-separated IDs, or none. Installed items stay locked.
   --yes               Apply an explicit --select list without menu confirmation.
   --help              Show help.
+Interactive: arrows move, Space toggles, Enter continues; review Install / Cancel.
+VPS_SETUP_UI=plain uses the numbered-menu fallback.
 Tools: tailscale,mosh,tmux,git,gh,codex,claude,node,bun
 Configuration: shortcut,shell
 Node and Bun default off. Only missing tools and outdated configuration are selectable.

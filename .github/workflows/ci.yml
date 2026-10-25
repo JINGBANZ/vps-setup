@@ -33,7 +33,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: macOS setup behavior (isolated commands, no system changes)
         # Use Apple's Bash 3.2 on macOS, rather than Homebrew's newer bash.
-        run: /bin/bash tests/test-macos.sh
+        run: |
+          source lib/terminal-ui.sh
+          trap ui_cleanup EXIT
+          ui_gum_download
+          export GUM_TEST_BIN="$UI_GUM_BIN"
+          /bin/bash tests/test-macos.sh
 
   # Regression guard for the fresh-box install hang: debconf/needrestart trying
   # to prompt with no TTY (the `curl | sudo bash` path). Runs on the two Ubuntu

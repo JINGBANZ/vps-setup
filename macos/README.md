@@ -50,10 +50,41 @@ Every run redetects the local installation before applying saved choices.
 | Configuration needs updating | Selectable | Compare and write changed content |
 | Configuration needs changing through a symlink | **LOCKED**, manual repair | Preserve the symlink and target |
 
-Toggle eligible numbers, use `all`, `none`, or `defaults`, then press Enter to
-review the plan. Type `apply` to proceed; anything else cancels. Locked entries
-cannot be selected or deselected, including through bulk commands or `--select`.
-Selecting an already installed tool alone does nothing.
+The keyboard menu uses [Gum](https://github.com/charmbracelet/gum). Installed,
+current and broken items appear in a read-only summary outside the checklists.
+The first checklist selects missing tools; the second selects configuration
+updates. Required shell integration is shown as a dependency of selected tools.
+The final plan includes any dependencies added for the shortcut.
+
+| Key | Action |
+| --- | --- |
+| ↑ / ↓ | Move between eligible items |
+| Space | Select or deselect the highlighted item |
+| Ctrl-A | Select all / clear the current checklist |
+| Enter | Continue to the next checklist or the plan |
+| Esc / Ctrl-C | Cancel without installing or changing configuration |
+
+After reviewing the plan, choose **Install** or **Cancel** with ←/→ and Enter.
+Cancel is selected by default. Menu failures stop before provisioning. Empty
+checklists are skipped, and accepting an empty selection does not install tools.
+Installed items cannot be selected through bulk actions or `--select` either.
+
+Gum **v0.17.0** is pinned because its arrow/Space behavior passes the real PTY
+keyboard tests; v2.0.2 failed the Space-toggle test. An existing matching version
+is reused. Otherwise, setup downloads the appropriate official release binary
+into a temporary directory and checks its SHA-256 against the digest pinned in
+`lib/terminal-ui.sh` **before extracting or running it**. No Homebrew, Go, Node,
+sudo or permanent Gum installation is required. Temporary UI files are removed
+on normal exit, cancellation or handled signals. As with other processes, SIGKILL
+or power loss cannot run cleanup handlers.
+
+If the download, checksum or version check fails, or the terminal is unsupported,
+setup automatically uses the numbered menu: toggle eligible numbers, use `all`,
+`none` or `defaults`, press Enter to review, then type `apply`. Set
+`VPS_SETUP_UI=plain` before the bootstrap command to use that mode explicitly
+(for example with a screen reader). `--check`, `--dry-run` and `--yes` never
+fetch or invoke Gum. Only interactive macOS onboarding uses this UI; Linux
+provisioning remains unchanged.
 
 | ID | Purpose / installation | Default if eligible |
 | --- | --- | --- |
@@ -69,7 +100,7 @@ Selecting an already installed tool alone does nothing.
 | `shortcut` | Configure `t NAME` and create `WORKSPACE_DIR` | Selected |
 | `shell` | Configure PATH and managed zsh/bash initialization | Selected |
 
-The last two entries appear in a separate **Configuration** section. A selected
+The last two entries appear in the separate **Configuration** checklist. A selected
 shortcut requires tmux: a missing tmux is added, while a broken tmux blocks the
 shortcut. Selected tools/shortcut add shell integration when it is not blocked,
 so new commands can be found in future shells. The plan shows this dependency;
@@ -177,6 +208,7 @@ run `--check` on your Mac for its actual local inventory.
 
 | Area | Source of truth | Repository choice |
 | --- | --- | --- |
+| Terminal UI | [Gum v0.17.0](https://github.com/charmbracelet/gum/releases/tag/v0.17.0), [choose implementation](https://github.com/charmbracelet/gum/tree/v0.17.0/choose) | Temporary pinned binary; release digests embedded in the loader; numbered-menu fallback |
 | Homebrew | [Installation](https://docs.brew.sh/Installation) | Download official installer to a temporary file with `curl -o "$installer"`, execute `/bin/bash "$installer"`, then remove it; download failure prevents execution |
 | Tailscale | [macOS variants](https://tailscale.com/docs/concepts/macos-variants), [daemon setup](https://github.com/tailscale/tailscale/wiki/Tailscaled-on-macOS) | Formula only when absent; startup/sign-in manual; preserve existing variants |
 | Mosh | [Official installation](https://mosh.org/#getting) | Homebrew package; SSH/UDP configuration outside this installer |
@@ -191,7 +223,10 @@ v0.40.8. The locked menu, selection dependencies and backup policy are repositor
 behavior, not claims of upstream endorsement.
 
 `bash tests/test-macos.sh` runs the real entrypoint with isolated fake installers,
-commands and HOME, including a real PTY menu. CI runs it on Linux and macOS
+commands and HOME. With `GUM_TEST_BIN` pointing to the verified pinned binary,
+it also drives the real Gum UI through a PTY: arrows, Space, all/none, defaults,
+confirmation, cancellation and reruns. CI downloads that binary with the same
+verified loader and requires these tests on Linux and macOS
 (Apple Bash 3.2), plus shell lint and Linux apt regressions. These tests verify
 selection, failure/retry and rerun behavior without installing software or changing
 system settings. They do not replace a real installation trial on a spare Mac.

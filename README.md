@@ -18,10 +18,12 @@ Run the command on the machine you want to set up.
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
 ```
 
-Choose missing tools or configuration updates, press **Enter**, then type
-`apply`. Installed tools, including Tailscale, stay locked and unchanged.
-Homebrew is added only when needed. If prompted, finish
-`xcode-select --install` and rerun setup. Sharing and power settings stay manual.
+Use **↑/↓** to move and **Space** to select missing tools or configuration
+updates. Press **Enter** to review, then choose **Install**. Installed tools,
+including Tailscale, stay locked and unchanged.
+The keyboard menu uses a temporary, verified Gum binary; a numbered menu is
+available automatically if Gum cannot load. Homebrew is added only when needed.
+If prompted, finish `xcode-select --install` and rerun setup. Sharing and power settings stay manual.
 
 **Debian/Ubuntu VPS — run from your normal user account with sudo:**
 
@@ -81,10 +83,12 @@ setup.sh              # orchestrator: sources lib, loops over modules/, logs out
 macos/
   setup.sh            # interactive selection and selected provisioning
   lib.sh              # local inventory, plans and configuration helpers
+  ui.sh               # Gum checklists and numbered-menu fallback
   design.html         # interactive installation walkthrough and official sources
   README.md           # Mac mini installation and manual checklist
 lib/
   common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
+  terminal-ui.sh      # temporary pinned Gum binary and checksum verification
 modules/
   10-apt-tools.sh     # git, curl, unzip, tmux, mosh, ufw
   15-ssh-hardening.sh # key-only SSH (guarded: skips if no key is present)

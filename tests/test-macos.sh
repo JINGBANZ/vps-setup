@@ -3,3 +3,4 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python3 "$REPO_ROOT/tests/test-macos-install.py"
+python3 "$REPO_ROOT/tests/test-macos-gum.py"
