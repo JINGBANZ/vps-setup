@@ -38,10 +38,28 @@ on_gum_pick() {
   done <<< "$output"
 }
 
+on_stage_summary() {
+  local i="$1" end="$2" title="$3" id label selected_labels=''
+  while [ "$i" -lt "$end" ]; do
+    id="${COMPONENTS[$i]}"
+    if on_selected "$id"; then
+      label="${LABELS[$i]}"
+      if [ "$id" = shell ] && { [ "$SHELL_REQUIRED" = 1 ] || on_selected shortcut; }; then
+        label="$label (required)"
+      fi
+      selected_labels="${selected_labels:+$selected_labels, }$label"
+    fi
+    i=$((i+1))
+  done
+  printf '\n%s: %s\n' "$title" "${selected_labels:-None}" >&4
+}
+
 on_gum_menu() {
-  local id config_title='Choose configuration updates'
+  local id tmux_selected=0 config_title='Choose configuration updates'
   SHELL_REQUIRED=0
   on_gum_pick 0 9 'Choose tools to install' || return 1
+  on_stage_summary 0 9 'Tools selected'
+  if on_selected tmux; then tmux_selected=1; fi
   # Wait until both pages are complete before adding shortcut dependencies.
   # Otherwise a default shortcut can reselect tmux even when both are later off.
   on_config_state shell
@@ -57,5 +75,9 @@ on_gum_menu() {
   fi
   on_gum_pick 9 "${#COMPONENTS[@]}" "$config_title" || return 1
   on_normalize
+  on_stage_summary 9 "${#COMPONENTS[@]}" 'Configuration selected'
+  if [ "$tmux_selected" = 0 ] && on_selected tmux; then
+    printf 'Required tool added: tmux (for Session shortcut: t)\n' >&4
+  fi
 }
 

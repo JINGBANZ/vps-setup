@@ -61,6 +61,10 @@ The keyboard menu uses [Gum](https://github.com/charmbracelet/gum). Installed,
 current and broken items appear in a read-only summary outside the checklists.
 The first checklist selects missing tools; the second selects configuration
 updates. Required shell integration is shown as a dependency of selected tools.
+After each stage, a compact selection summary remains in the terminal while the
+interactive checklist and key hints clear. Empty selections say “None”; required
+shell integration is labeled, and tmux added for the shortcut gets its own
+dependency line. These records describe the plan, not completed installation.
 The final plan includes any dependencies added for the shortcut.
 
 | Key | Action |
