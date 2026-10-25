@@ -10,59 +10,30 @@ for installation choices and the manual server checklist.
 
 ## Quick start
 
-### Mac mini
+Run the command on the machine you want to set up.
 
-Run this **on your Mac mini**, in Terminal or an interactive SSH session, as
-your normal administrator account **without sudo**:
+**Mac mini — run as your normal administrator user, without sudo:**
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
 ```
 
-No manual clone or pull is needed. The bootstrap downloads the latest `main`
-into a temporary directory, opens interactive onboarding, and removes that
-directory when it exits. This command keeps terminal input available for the
-menu and Homebrew prompts. Rerun the same command later to install missing tools.
+Choose missing tools or configuration updates, press **Enter**, then type
+`apply`. Installed tools, including Tailscale, stay locked and unchanged.
+Homebrew is added only when needed. If prompted, finish
+`xcode-select --install` and rerun setup. Sharing and power settings stay manual.
 
-Installed tools, including your existing Tailscale, stay locked and unchanged.
-Toggle numbers for missing tools or configuration updates, press **Enter** to
-review the plan, then type **`apply`** to proceed. Node.js and Bun default off.
-
-Homebrew is installed only when a selected missing formula needs it; its initial
-installer may request your administrator password. If Command Line Tools are
-missing, run `xcode-select --install`, finish Apple's installer, then rerun the
-command above. Open a new terminal or SSH session after shell configuration.
-
-Sharing, power settings and sign-in stay manual; setup performs no connection
-tests. See the [Mac guide](macos/README.md#start) for no-clone inventory and dry-run
-commands, or the [interactive walkthrough](macos/design.html) for the menu.
-
-Prefer a local checkout?
+**Debian/Ubuntu VPS — run from your normal user account with sudo:**
 
 ```bash
-git clone https://github.com/JINGBANZ/vps-setup.git
-cd vps-setup
-bash setup.sh
+sudo /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
 ```
 
-### Debian/Ubuntu VPS
+Both commands download setup into a temporary directory and clean it up on exit.
+No clone or pull is needed. Rerun the same command to fill in missing tools.
+Open a new terminal or SSH session afterward to load shell changes.
 
-Run this on the VPS as a **non-root user with `sudo`**:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh | sudo bash
-source ~/.bashrc   # load the new PATH (nvm, bun, claude, codex)
-```
-
-That's it. The bootstrap downloads the repo and runs `setup.sh`.
-
-Prefer to clone first? Same result:
-
-```bash
-git clone https://github.com/JINGBANZ/vps-setup.git && cd vps-setup
-sudo ./setup.sh
-source ~/.bashrc
-```
+See the [Mac guide](macos/README.md) for details and preview commands.
 
 ## Tools installed on Linux
 
@@ -156,7 +127,8 @@ when running setup.
 
 ## Shared PostgreSQL (Linux)
 
-`DEV_POSTGRES=1 ./setup.sh` installs the distro's PostgreSQL as one server that
+Run the bootstrap with `DEV_POSTGRES=1` after `sudo` to install the distro's
+PostgreSQL as one server that
 every project and worktree shares, instead of a database container each. It
 listens on its Unix socket only, and your login user gets a superuser role of the
 same name through peer authentication, so there is no password anywhere:
@@ -186,7 +158,8 @@ tmux:
 - **Switch tasks:** `prefix + s` (tmux's built-in session picker).
 
 Point it at a different directory by setting `WORKSPACE_DIR` when you run setup
-(e.g. `WORKSPACE_DIR=/srv/code sudo ./setup.sh`). Re-running with a new value
+(on Linux, add `WORKSPACE_DIR=/srv/code` after `sudo` in the bootstrap command).
+Re-running with a new value
 refreshes the `t` shortcut in place. `detach-on-destroy` is left at the tmux
 default, so finishing a task detaches you — handy when each task lives in its own
 cmux tab that you just close when done. Pair it with a cmux custom command that
@@ -204,7 +177,7 @@ cmux ssh clouddesk -- tmux new-session -A -s main -c "$HOME/workspace"
 - **Pass env vars after `sudo`** (sudo scrubs the environment), e.g. set a
   non-standard SSH port:
   ```bash
-  curl -fsSL .../bootstrap.sh | sudo SSH_PORT=2222 bash
+  sudo SSH_PORT=2222 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
   ```
 - Pin a different nvm release with `NVM_VERSION=v0.40.x`.
 - Set where the `t` shortcut opens sessions with `WORKSPACE_DIR=/path` (default

@@ -7,59 +7,34 @@ Your existing Tailscale installation is kept, including its service state.
 
 ## Start
 
-Run this **on your Mac mini**, in Terminal or an interactive SSH session,
-**without sudo**:
+Run this on the Mac mini in Terminal or an interactive SSH session, **without sudo**:
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)"
 ```
 
-The bootstrap downloads the latest `main` into a temporary directory, runs
-interactive onboarding, then removes that directory on exit. No permanent
-repository checkout or manual pull is needed. Using `bash -c` keeps terminal
-input available for onboarding and Homebrew prompts.
+Setup downloads to a temporary directory and cleans it up on exit. No clone or
+pull is needed; rerun the same command to install missing tools. Terminal input
+stays available for the menu and Homebrew prompts. Open a new terminal or SSH
+session afterward to load shell changes.
 
-Installed tools, including existing Tailscale, stay locked and unchanged. Toggle
-eligible numbers, press **Enter** to review, then type **`apply`** to proceed.
-Rerun the same command later to install missing tools. After shell configuration,
-open a new terminal or SSH session to load it.
+If Command Line Tools are missing, run `xcode-select --install`, finish Apple's
+installer, then rerun setup. Homebrew is added only when needed and may request
+your administrator password. See [Homebrew's requirements](https://docs.brew.sh/Installation).
 
-Homebrew is added only when a selected missing formula needs it. Its initial
-installer may request your administrator password. If Command Line Tools are
-missing, run `xcode-select --install`, finish Apple's installer, then rerun setup.
-Skip that step if the tools are already installed. Use a macOS version supported
-by [Homebrew](https://docs.brew.sh/Installation).
-
-For a local inventory or a plan without installing anything, pass flags after
-`--` (the placeholder for Bash's `$0`, so later arguments reach the bootstrap):
+To inspect or preview without installing anything, append `--` and the setup flags:
 
 ```bash
-# Local inventory only; still downloads setup into a temporary directory.
+# Local inventory
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --check
 
-# Preview selected work.
+# Preview selected work
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select mosh,tmux,codex --dry-run
 ```
 
-### Optional local checkout
-
-If you prefer keeping the scripts locally:
-
-```bash
-git clone https://github.com/JINGBANZ/vps-setup.git
-cd vps-setup
-bash setup.sh
-
-# These commands run from the checkout:
-bash setup.sh --check
-bash setup.sh --select mosh,tmux,codex --dry-run
-bash setup.sh --select mosh,tmux,shortcut,codex,claude --yes
-bash setup.sh --select none --yes
-```
-
-`--yes` requires an explicit list and skips this script's confirmation. An upstream
-installer, notably Homebrew on first installation, can still request input or
-administrator authorization. Linux rejects these Mac-only flags.
+These commands still download setup temporarily. `--yes` requires an explicit
+`--select` list and skips the menu confirmation; upstream installers may still
+prompt. These flags are macOS-only.
 
 ## Menu: nine tools and two configuration choices
 
