@@ -6,7 +6,7 @@ and run Claude Code or Codex. No editor or VS Code installation is required.
 
 The script detects the OS. Linux uses the modules below; macOS uses Homebrew
 and interactive component selection. See the [Mac mini setup guide](macos/README.md)
-for Wi-Fi, optional Screen Sharing, and reboot recovery.
+for installation choices and the manual server checklist.
 
 ## Quick start
 
@@ -23,13 +23,13 @@ cd vps-setup
 bash setup.sh
 ```
 
-The Mac onboarding shows installed versions and configuration, lets you choose
-components, then reviews the plan before applying it. Node.js and Bun default
-off. Use `bash setup.sh --check` for read-only inspection or `--dry-run` for a
-plan. Existing working tools are reused and original shell files are backed up.
-The script requests sudo for selected system settings/services when needed. Finish the
-one-time Sharing settings and authentication steps in the
-[Mac guide](macos/README.md) before leaving the mini unattended.
+The Mac onboarding locks installed tools and lets you select missing tools or
+configuration updates. Node.js and Bun default off. Homebrew is an automatic
+dependency only when a selected missing formula needs it; its initial installer
+may request sudo. Use `bash setup.sh --check` for a local inventory or `--dry-run`
+for a plan. Existing Tailscale installations and services are preserved. Sharing,
+power settings and sign-in stay manual; setup performs no connection tests.
+See the [Mac guide](macos/README.md) and [interactive walkthrough](macos/design.html).
 
 ### Debian/Ubuntu VPS
 
@@ -58,7 +58,7 @@ Each command is taken from the tool's official documentation.
 |------|-------------------------|----------------|
 | Claude Code | AI coding agent | `curl -fsSL https://claude.ai/install.sh \| bash` |
 | Codex CLI | AI coding agent | `curl -fsSL https://chatgpt.com/codex/install.sh \| sh` |
-| nvm | Manages the Node runtime | `nvm-sh` versioned `install.sh` (pinned `v0.40.5`) |
+| nvm | Manages the Node runtime | `nvm-sh` versioned `install.sh` (pinned `v0.40.8`) |
 | Node.js (LTS) | JS/TS runtime the agents run on | `nvm install --latest-npm 'lts/*'` |
 | Bun | Fast JS/TS runtime & package manager | `curl -fsSL https://bun.com/install \| bash` |
 | gh (GitHub CLI) | Drive GitHub (PRs, issues, repos) from CLI | `cli.github.com` signed apt repo |
@@ -95,9 +95,9 @@ bootstrap.sh          # one-command remote installer
 setup.sh              # orchestrator: sources lib, loops over modules/, logs output
 macos/
   setup.sh            # interactive selection and selected provisioning
-  lib.sh              # detection, plans, configuration and service helpers
-  design.html         # interactive architecture and onboarding illustration
-  README.md           # Mac mini setup and remote access guide
+  lib.sh              # local inventory, plans and configuration helpers
+  design.html         # interactive installation walkthrough and official sources
+  README.md           # Mac mini installation and manual checklist
 lib/
   common.sh           # helpers (log/skip/ok/warn), SUDO, have(), settings
 modules/
@@ -194,8 +194,7 @@ cmux ssh clouddesk -- tmux new-session -A -s main -c "$HOME/workspace"
   ```
 - Pin a different nvm release with `NVM_VERSION=v0.40.x`.
 - Set where the `t` shortcut opens sessions with `WORKSPACE_DIR=/path` (default
-  `~/workspace`). Use an existing directory — tmux silently falls back to your
-  home dir if it doesn't exist.
+  `~/workspace`). Create the directory before invoking `t`; tmux needs it to exist.
 - Install from a fork/branch with `VPS_SETUP_REPO` / `VPS_SETUP_REF` (defaults
   to this repo's `main`).
 - Add or remove base apt tools via the `APT_PKGS` array in

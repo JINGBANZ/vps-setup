@@ -1,64 +1,59 @@
 #!/usr/bin/env bash
-# Interactive Mac provisioning; compatible with Apple's Bash 3.2.
+# Local server installation only; no authentication or client connection probes.
 set -euo pipefail
+# Saved choices are data: never expand filename patterns or execute their contents.
+set -f
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=macos/lib.sh
 . "$REPO_ROOT/macos/lib.sh"
-SELECTED=" tailscale ssh mosh tmux shortcut git gh codex claude screen "
+SELECTED=' tailscale mosh tmux git gh codex claude shortcut shell '
 DEFAULTS="$SELECTED"
 explicit=0; assume_yes=0; dry_run=0; check_only=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) mac_usage; exit 0 ;;
-    --select)
-      [ "$#" -ge 2 ] || die '--select requires a list (or none)'
-      mac_parse_selection "$2"; explicit=1; shift ;;
+    --select) [ "$#" -ge 2 ] || die '--select requires a list'; mac_parse_selection "$2"; explicit=1; shift ;;
     --yes) assume_yes=1 ;;
     --dry-run) dry_run=1 ;;
     --check) check_only=1 ;;
-    *) die "Unknown argument: $1 (see --help)" ;;
+    *) die "Unknown argument: $1" ;;
   esac
   shift
 done
-[ "$assume_yes:$explicit" != 1:0 ] || die '--yes requires an explicit --select list'
-[ "$(uname -s)" = Darwin ] || die 'macos/setup.sh requires macOS'
-[ "$(id -u)" -ne 0 ] || die 'Run bash setup.sh as your normal user WITHOUT sudo'
-[ -z "${GH_RUNNER_REPO:-}" ] && [ "${DEV_POSTGRES:-0}" = 0 ] || die 'PostgreSQL and GitHub Actions runner are Linux-only'
+[ "$assume_yes:$explicit" != 1:0 ] || die '--yes requires explicit --select'
+[ "$(uname -s)" = Darwin ] || die 'macOS required'
+[ "$(id -u)" -ne 0 ] || die 'Run without sudo as your normal administrator user'
+[ -z "${GH_RUNNER_REPO:-}" ] && [ "${DEV_POSTGRES:-0}" = 0 ] || die 'PostgreSQL and Actions runner are Linux-only'
 # shellcheck source=lib/common.sh
 . "$REPO_ROOT/lib/common.sh"
 CONFIG_DIR="$HOME/.config/vps-setup"
-case "$WORKSPACE_DIR" in /*) ;; *) die 'WORKSPACE_DIR must be an absolute path' ;; esac
-case "${ZDOTDIR:-$HOME}" in /*) ;; *) die 'ZDOTDIR must be an absolute path' ;; esac
-case "${MAC_TAILSCALE:-1}" in
-  0|1) ;; *) die 'MAC_TAILSCALE must be 0 or 1' ;;
-esac
-# Plain validated data, never sourced as executable code.
+case "$WORKSPACE_DIR" in /*) ;; *) die 'WORKSPACE_DIR must be absolute' ;; esac
+case "${ZDOTDIR:-$HOME}" in /*) ;; *) die 'ZDOTDIR must be absolute' ;; esac
+case "${MAC_TAILSCALE:-1}" in 0|1) ;; *) die 'MAC_TAILSCALE must be 0 or 1' ;; esac
 if [ "$explicit" = 0 ] && [ -f "$CONFIG_DIR/selection.txt" ]; then
-  saved="$(cat "$CONFIG_DIR/selection.txt")"
-  # Retire only the former power choice; still reject other invalid saved IDs.
   saved_current=''
+  saved="$(cat "$CONFIG_DIR/selection.txt")"
   for saved_id in ${saved//,/ }; do
-    if [ "$saved_id" = power ]; then
-      printf 'Ignoring saved power choice; configure power manually in System Settings.\n'
-    else
-      saved_current="$saved_current $saved_id"
-    fi
+    case "$saved_id" in
+      ssh|screen|power) printf 'Retired saved choice %s: now manual.\n' "$saved_id" ;;
+      *) saved_current="$saved_current $saved_id" ;;
+    esac
   done
   mac_parse_selection "${saved_current:-none}"
 fi
 [ "${MAC_TAILSCALE:-1}" = 1 ] || mac_deselect tailscale
 mac_discover
+mac_normalize
 mac_inventory
-if [ "$check_only" = 1 ]; then mac_addresses; exit 0; fi
-if [ "$dry_run" = 0 ] && [ "$assume_yes" = 0 ]; then
+if [ "$check_only" = 1 ]; then mac_manual; exit 0; fi
+if [ "$dry_run:$assume_yes" = 0:0 ]; then
   if [ -t 0 ]; then exec 3<&0
   elif ( : < /dev/tty ) 2>/dev/null; then exec 3</dev/tty
-  else die 'A terminal is required. Use --select LIST --yes for automation, or --check / --dry-run to inspect.'
+  else die 'A terminal is required; use --check, --dry-run or explicit --select LIST --yes'
   fi
   if [ "$explicit" = 0 ]; then
     while :; do
-      mac_menu
-      printf 'Toggle numbers (e.g. 3,4), all / none / defaults, Enter to review, q to quit: '
+      printf 'Toggle eligible numbers, all / none / defaults, Enter to review, q to quit: '
       IFS= read -r answer <&3 || die 'Input ended; no changes applied'
       case "$answer" in
         '') break ;;
@@ -66,85 +61,98 @@ if [ "$dry_run" = 0 ] && [ "$assume_yes" = 0 ]; then
         all) SELECTED=" ${COMPONENTS[*]} " ;;
         none) SELECTED=' ' ;;
         defaults) SELECTED="$DEFAULTS" ;;
-        *)
-          for token in ${answer//,/ }; do
-            case "$token" in
-              1|2|3|4|5|6|7|8|9|10|11|12)
-                item="${COMPONENTS[$((token-1))]}"
-                if mac_selected "$item"; then mac_deselect "$item"; else mac_select "$item"; fi ;;
-              *) printf 'Unknown selection: %s\n' "$token" ;;
-            esac
-          done ;;
+        *) for token in ${answer//,/ }; do
+          case "$token" in
+            1|2|3|4|5|6|7|8|9|10|11)
+              index=$((token-1)); item="${COMPONENTS[$index]}"
+              if ! mac_eligible "$index"; then printf '%s is locked; no change.\n' "$item"
+              elif mac_selected "$item"; then mac_deselect "$item"
+              else mac_select "$item"; fi ;;
+            *) printf 'Unknown selection: %s\n' "$token" ;;
+          esac
+        done ;;
       esac
+      mac_normalize
+      mac_inventory
     done
   fi
 fi
-if mac_selected shortcut && ! mac_selected tmux; then
-  mac_select tmux; printf '\nDependency added: tmux for the t shortcut.\n'
-fi
-if mac_selected mosh && ! mac_selected ssh; then
-  mac_select ssh; printf '\nDependency added: Remote Login guidance for Mosh.\n'
-fi
+mac_normalize
 mac_plan
-[ "$dry_run" = 0 ] || exit 0
+if [ "$dry_run" = 1 ]; then mac_manual; exit 0; fi
 if [ "$assume_yes" = 0 ]; then
-  printf '\nType apply to continue, or anything else to cancel: '
+  printf 'Type apply to continue, or anything else to cancel: '
   IFS= read -r answer <&3 || die 'Input ended; no changes applied'
   [ "$answer" = apply ] || { printf 'Cancelled; no changes applied.\n'; exit 0; }
 fi
-[ "$SELECTED" != ' ' ] || { printf 'Nothing selected; no changes applied.\n'; exit 0; }
-if mac_selected tailscale && [ "$TS_KIND" = conflict ]; then
-  die 'Conflicting Tailscale installations. Resolve locally or deselect tailscale; no changes applied.'
+if [ "$SELECTED" = ' ' ]; then printf 'No eligible items selected; no changes applied.\n'; mac_summary; exit 0; fi
+if [ "$NEED_BREW" = 1 ]; then
+  [ "$CLT_READY" = 1 ] || die 'Finish xcode-select --install first; no changes applied'
+  [ "$BREW_BROKEN" = 0 ] || die 'Repair existing Homebrew first; no changes applied'
 fi
-if [ "$NEED_BREW" = 1 ] && [ "$CLT_READY" = 0 ]; then
-  die 'Run xcode-select --install, finish the Apple installer, then rerun. No changes applied.'
-fi
-# Mutations start here. Package/agent installers run as the normal user.
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1
 mkdir -p "$CONFIG_DIR"
-if [ "$NEED_BREW" = 1 ]; then mac_ensure_brew; fi
-for component in git gh tmux mosh; do
-  if mac_selected "$component" && ! mac_tool "$component" >/dev/null; then
-    "$BREW_BIN" install --formula "$component"
-    mac_tool "$component" >/dev/null || die "$component unavailable; fix PATH and rerun"
+failed=0; brew_ready=1
+if [ "$NEED_BREW" = 1 ] && ! mac_ensure_brew; then brew_ready=0; failed=1; warn 'Homebrew dependency failed'; fi
+# Install only items that were missing, rechecking before every mutation.
+i=0
+while [ "$i" -lt 9 ]; do
+  item="${COMPONENTS[$i]}"
+  if mac_selected "$item"; then
+    mac_detect_tool "$item"
+    if [ "$DETECTED" != missing ]; then
+      if [ "$DETECTED" = installed ]; then RESULTS[$i]='Already present — kept'
+      else RESULTS[$i]='Failed — detected existing unusable installation; repair manually'; failed=1; fi
+    else
+      success=0
+      case "$item" in
+        tailscale|git|gh|tmux|mosh)
+          if [ "$brew_ready" = 1 ] && "$BREW_BIN" install --formula "$item"; then success=1; fi ;;
+        node|bun|codex|claude)
+          mac_backup_profiles
+          export INSTALL_NODE=0 INSTALL_BUN=0 INSTALL_CODEX=0 INSTALL_CLAUDE=0
+          case "$item" in
+            node) INSTALL_NODE=1 ;; bun) INSTALL_BUN=1 ;; codex) INSTALL_CODEX=1 ;; claude) INSTALL_CLAUDE=1 ;;
+          esac
+          export PROFILE=/dev/null BUN_INSTALL="$HOME/.bun"
+          module=modules/70-agents.sh
+          case "$item" in node|bun) module=modules/60-node-bun.sh ;; esac
+          # A separate Bash process preserves errexit inside third-party modules.
+          if /bin/bash -eo pipefail -c '. "$1/lib/common.sh"; . "$1/$2"' _ "$REPO_ROOT" "$module"; then success=1; fi
+          mac_load_nvm ;;
+      esac
+      hash -r
+      if [ "$success" = 1 ] && mac_tool "$item" >/dev/null; then
+        RESULTS[$i]='Installed — local version checked'
+        # Even a new Tailscale installation leaves startup and sign-in manual.
+      else RESULTS[$i]='Failed — installation incomplete; rerun after resolving the error'; failed=1; fi
+    fi
   fi
+  i=$((i+1))
 done
-if mac_selected tailscale; then mac_tailscale; fi
-# Independent native installers; Linux defaults remain enabled.
-INSTALL_NODE=0; INSTALL_BUN=0; INSTALL_CODEX=0; INSTALL_CLAUDE=0
-if mac_selected node && ! mac_tool node >/dev/null; then INSTALL_NODE=1; fi
-if mac_selected bun && ! mac_tool bun >/dev/null; then INSTALL_BUN=1; fi
-if mac_selected codex && ! mac_tool codex >/dev/null; then INSTALL_CODEX=1; fi
-if mac_selected claude && ! mac_tool claude >/dev/null; then INSTALL_CLAUDE=1; fi
-export PROFILE=/dev/null BUN_INSTALL="$HOME/.bun"
-# Preserve original startup files only when a native installer will run.
-if [ "$INSTALL_NODE$INSTALL_BUN$INSTALL_CODEX$INSTALL_CLAUDE" != 0000 ]; then mac_backup_profiles; fi
-# shellcheck source=modules/60-node-bun.sh
-. "$REPO_ROOT/modules/60-node-bun.sh"
-# shellcheck source=modules/70-agents.sh
-. "$REPO_ROOT/modules/70-agents.sh"
 if mac_selected shortcut; then
-  mkdir -p "$WORKSPACE_DIR"
-  shortcut_tmp="$(mktemp)"
-  if [ -f "$CONFIG_DIR/tmux.sh" ]; then cp "$CONFIG_DIR/tmux.sh" "$shortcut_tmp"; fi
-  TMUX_RC_FILE="$shortcut_tmp"
-  # shellcheck source=modules/80-tmux.sh
-  . "$REPO_ROOT/modules/80-tmux.sh"
-  mac_write "$shortcut_tmp" "$CONFIG_DIR/tmux.sh"
-  rm -f "$shortcut_tmp"
+  if mac_tool tmux >/dev/null; then
+    mkdir -p "$WORKSPACE_DIR"
+    shortcut_tmp="$(mktemp)"
+    mac_shortcut_file "$shortcut_tmp"
+    mac_write "$shortcut_tmp" "$CONFIG_DIR/tmux.sh"
+    rm -f "$shortcut_tmp"
+    mac_config_state shortcut
+    if [ "$DETECTED" = current ]; then RESULTS[9]='Configured — local content checked'
+    else RESULTS[9]='Failed — shortcut configuration incomplete'; failed=1; fi
+  else RESULTS[9]='Failed — tmux dependency unavailable'; failed=1; fi
 fi
-mac_shell_config
-missing=0
-for component in git gh tmux mosh node bun codex claude; do
-  if mac_selected "$component" && ! mac_tool "$component" >/dev/null; then
-    warn "$component unavailable; rerun to retry"; missing=1
-  fi
-done
-if [ "$missing" = 0 ]; then
+if mac_selected shell; then
+  mac_shell_config
+  mac_config_state shell
+  if [ "$DETECTED" = current ]; then RESULTS[10]='Configured — local content checked'
+  else RESULTS[10]='Failed — shell integration needs manual review'; failed=1; fi
+fi
+if [ "$failed" = 0 ]; then
   selection_tmp="$(mktemp)"
   printf '%s\n' "$SELECTED" > "$selection_tmp"
   mac_write "$selection_tmp" "$CONFIG_DIR/selection.txt"
   rm -f "$selection_tmp"
 fi
-mac_finish
-[ "$missing" = 0 ] || exit 1
+mac_summary
+[ "$failed" = 0 ]
