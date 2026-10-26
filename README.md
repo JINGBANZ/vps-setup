@@ -124,8 +124,9 @@ new logins use HTTPS and GitHub's browser/device-code flow. Over SSH, open the
 displayed GitHub URL on your own computer and enter the displayed code.
 
 On macOS, if authentication is unavailable, setup first runs
-`security unlock-keychain "$HOME/Library/Keychains/login.keychain-db"` in the
-same terminal. Enter the Mac's login Keychain password at the native prompt.
+`security unlock-keychain` in the same terminal. This unlocks the configured
+default Keychain (normally the login Keychain), which GitHub CLI uses for new
+credentials. Enter that Keychain's password at the native prompt.
 Setup never captures or stores that password. If unlocking restores an existing
 login, no new login runs; if unlocking fails, setup stops the authentication step.
 Password prompts and device codes bypass the Linux installation log.
@@ -141,13 +142,21 @@ to configure separately.
 If you skipped the step, sign in from your workstation terminal or SSH session:
 
 ```bash
-# macOS must unlock successfully before login. Linux skips the unlock command.
-if [ "$(uname -s)" != Darwin ] ||
-  security unlock-keychain "$HOME/Library/Keychains/login.keychain-db"; then
-  gh auth login --hostname github.com --git-protocol https --web &&
-    gh auth setup-git --hostname github.com &&
+github_authenticate() {
+  if [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
+    gh auth status --active --hostname github.com || return 1
+  elif ! gh auth status --active --hostname github.com >/dev/null 2>&1; then
+    if [ "$(uname -s)" = Darwin ]; then
+      security unlock-keychain || return 1
+    fi
+    # An unlock may restore the existing login; only sign in if still needed.
+    gh auth status --active --hostname github.com >/dev/null 2>&1 ||
+      gh auth login --hostname github.com --git-protocol https --web || return 1
+  fi
+  gh auth setup-git --hostname github.com &&
     gh auth status --active --hostname github.com
-fi
+}
+github_authenticate
 ```
 
 For an existing login, start with `gh auth status --active --hostname github.com`.

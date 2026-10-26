@@ -28,9 +28,10 @@ already-open shell immediately; it is not a command to repeat in every session.
 
 After installation, choose **Sign in** at the optional GitHub prompt to check or
 set up your login and Git HTTPS credential helper. **Skip is the default.** If
-authentication is unavailable, setup first unlocks your login Keychain in that
-same terminal; enter your Mac Keychain password only at its native prompt. SSH
-login does not automatically unlock Keychain. Working existing credentials are
+authentication is unavailable, setup first unlocks your configured default
+Keychain (normally the login Keychain) in that same terminal; enter its password
+only at the native prompt. SSH login does not automatically unlock Keychain.
+Working existing credentials are
 kept; an existing plaintext token is not automatically migrated. Check the final
 status for `(keyring)`, which confirms Keychain storage. See the shared
 [authentication flow and recovery commands](../README.md#github-authentication).

@@ -20,7 +20,7 @@ class GitHubAuth(unittest.TestCase):
         self.f.script('security', '''
 printf 'security %s\\n' "$*" >> "$TEST_STATE/auth-calls"
 [ -t 0 ] && [ -t 1 ] && [ -t 2 ] || exit 80
-[ "$1" = unlock-keychain ] && [ "$2" = "$HOME/Library/Keychains/login.keychain-db" ] || exit 81
+[ "$#" = 1 ] && [ "$1" = unlock-keychain ] || exit 81
 stty -echo
 trap 'stty echo' EXIT
 printf 'Fake Keychain password: '
@@ -87,6 +87,15 @@ esac
     def calls(self):
         return self.f.calls('auth-calls')
 
+    def documented_login(self):
+        instructions = (ROOT / 'README.md').read_text().split('If you skipped the step,', 1)[1]
+        snippet = instructions.split('```bash\n', 1)[1].split('```', 1)[0]
+        script = self.f.base / 'documented-login.sh'
+        script.write_text(snippet)
+        terminal = gum.Terminal(self.env, script=script)
+        self.addCleanup(terminal.close)
+        return terminal
+
     def assert_install_preserved(self):
         self.assertTrue((self.f.config / 'selection.txt').is_file())
         self.assertFalse((self.f.state / 'forbidden').exists(), self.f.calls('forbidden'))
@@ -108,7 +117,7 @@ esac
                 self.assert_install_preserved()
                 (self.f.config / 'env.sh').unlink()
 
-    def test_new_mac_install_unlocks_and_logs_in_with_terminal_stdin(self):
+    def test_new_mac_install_uses_default_keychain_and_terminal_stdin(self):
         (self.f.state / 'tool-gh').unlink()
         t = self.offer('gh', piped_input=True)
         t.send(b'y')
@@ -121,6 +130,7 @@ esac
         self.assertNotIn('test-password', out)
         calls = self.calls()
         self.assertLess(calls.index('security unlock-keychain'), calls.index('gh auth login'))
+        self.assertIn('security unlock-keychain\n', calls)
         self.assertLess(calls.index('gh auth login'), calls.index('gh auth setup-git'))
         self.assertNotIn('test-password', calls)
         self.assert_install_preserved()
@@ -278,6 +288,56 @@ esac
         t.send(b'y')
         self.assertNotIn('Set up GitHub authentication now?', t.finish(expected=1))
         self.assertEqual(self.calls(), '')
+
+    def test_documented_flow_keeps_working_authentication(self):
+        (self.f.state / 'authenticated').touch()
+        self.documented_login().finish()
+        self.assertNotIn('security ', self.calls())
+        self.assertNotIn('gh auth login', self.calls())
+        self.assertIn('gh auth setup-git', self.calls())
+
+    def test_documented_flow_rechecks_auth_after_default_keychain_unlock(self):
+        self.env['UNLOCK_RESTORES_AUTH'] = '1'
+        t = self.documented_login()
+        self.unlock(t)
+        t.finish()
+        self.assertIn('security unlock-keychain\n', self.calls())
+        self.assertNotIn('gh auth login', self.calls())
+        self.assertIn('gh auth setup-git', self.calls())
+
+    def test_documented_flow_stops_after_failed_unlock(self):
+        self.env['FAIL_UNLOCK'] = '1'
+        t = self.documented_login()
+        self.unlock(t)
+        t.finish(expected=1)
+        self.assertNotIn('gh auth login', self.calls())
+        self.assertNotIn('gh auth setup-git', self.calls())
+
+    def test_documented_flow_checks_environment_without_replacing_it(self):
+        for valid in ['0', '1']:
+            with self.subTest(valid=valid):
+                self.env.update(GH_TOKEN='test-env-token', ENV_AUTH_VALID=valid)
+                out = self.documented_login().finish(expected=1 - int(valid))
+                self.assertNotIn('test-env-token', out + self.calls())
+                self.assertNotIn('security ', self.calls())
+                self.assertNotIn('gh auth login', self.calls())
+                self.assertEqual('gh auth setup-git' in self.calls(), valid == '1')
+
+    def test_documented_flow_logs_in_only_when_auth_is_still_unavailable(self):
+        t = self.documented_login()
+        self.unlock(t)
+        self.login(t)
+        t.finish()
+        self.assertIn('gh auth login --hostname github.com --git-protocol https --web', self.calls())
+        self.assertIn('gh auth setup-git', self.calls())
+
+    def test_documented_flow_skips_keychain_on_linux(self):
+        self.env['TEST_OS'] = 'Linux'
+        t = self.documented_login()
+        self.login(t)
+        t.finish()
+        self.assertNotIn('security ', self.calls())
+        self.assertIn('gh auth setup-git', self.calls())
 
 
 if __name__ == '__main__':

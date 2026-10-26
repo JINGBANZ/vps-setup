@@ -8,9 +8,9 @@ on_github_authenticate() {
     printf 'Keeping existing GitHub authentication.\n'
   else
     if [ "$PLATFORM" = macos ]; then
-      printf 'Unlock the Mac login Keychain in this terminal before signing in.\n'
-      printf 'Enter your Mac login Keychain password at the macOS prompt; setup does not record it.\n'
-      security unlock-keychain "$HOME/Library/Keychains/login.keychain-db" || return 1
+      printf 'Unlock the Mac default Keychain in this terminal before signing in.\n'
+      printf 'Enter its password at the macOS prompt; setup does not record it.\n'
+      security unlock-keychain || return 1
     fi
     # Unlocking may make an existing login available in this SSH session.
     if ! gh auth status --active --hostname github.com >/dev/null 2>&1; then
@@ -22,7 +22,7 @@ on_github_authenticate() {
   gh auth status --active --hostname github.com || return 1
   if [ "$PLATFORM" = macos ] && [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
     printf 'Storage check: (keyring) means Keychain; a configuration file path means plaintext storage.\n'
-    printf 'If Keychain locks again, run: security unlock-keychain "$HOME/Library/Keychains/login.keychain-db"\n'
+    printf 'If Keychain locks again, run: security unlock-keychain\n'
   fi
 }
 
