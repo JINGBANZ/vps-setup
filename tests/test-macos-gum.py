@@ -158,6 +158,8 @@ class GumTests(unittest.TestCase):
         t.send(b'\x1b[D')  # Move from Cancel to Apply.
         time.sleep(0.1)
         t.send(b'\r')
+        t.expect('n Skip')
+        t.send(b'\r')
         out = t.finish()
         self.assertIn('Installed', out)
         self.assertIn('brew install --formula mosh', self.f.calls())

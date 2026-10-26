@@ -2,7 +2,8 @@
 
 Run setup on the Mac mini as your normal administrator user, **without sudo**.
 It installs missing development tools and optionally configures your shell.
-It does not configure SSH, Screen Sharing, power, credentials or network access.
+It offers a separate optional GitHub login after successful interactive setup.
+It does not configure SSH, Screen Sharing, power or network access.
 Your existing Tailscale installation is kept, including its service state.
 
 ## Start
@@ -24,6 +25,16 @@ your normal Homebrew preferences are unchanged.
 Open a new terminal or SSH session afterward to load shell changes automatically.
 You only need `source "$HOME/.config/vps-setup/env.sh"` if you want to update the
 already-open shell immediately; it is not a command to repeat in every session.
+
+After installation, choose **Sign in** at the optional GitHub prompt to check or
+set up your login and Git HTTPS credential helper. **Skip is the default.** If
+authentication is unavailable, setup first unlocks your login Keychain in that
+same terminal; enter your Mac Keychain password only at its native prompt. SSH
+login does not automatically unlock Keychain. Working existing credentials are
+kept; an existing plaintext token is not automatically migrated. Check the final
+status for `(keyring)`, which confirms Keychain storage. See the shared
+[authentication flow and recovery commands](../README.md#github-authentication).
+Automated, preview, failed, cancelled and no-change runs do not offer login.
 
 If Command Line Tools are missing, run `xcode-select --install`, finish Apple's
 installer, then rerun setup. Homebrew is added only when needed and may request
@@ -180,8 +191,9 @@ Earlier power changes are not undone; any old power-settings backup is retained.
 ## Manual server checklist
 
 These are guidance only, outside the installation menu. Setup does not inspect
-or change them and performs no SSH, Mosh, Screen Sharing, authentication or
-network connection probes. `--check` reports local installation state, **not**
+or change SSH, Mosh, Screen Sharing or network reachability. GitHub authentication
+is checked only after accepting the optional post-install prompt.
+`--check` reports local installation state, **not**
 a Tailscale address, sign-in status or a guarantee of remote reachability.
 
 - **Remote Login / optional Screen Sharing:** enable in System Settings > General
@@ -192,8 +204,9 @@ a Tailscale address, sign-in status or a guarantee of remote reachability.
   `sudo brew services start tailscale`, then `sudo tailscale up`. Setup installs
   the formula but leaves service startup and sign-in to you. If Tailscale already
   works, keep that installation; these commands are not instructions to migrate it.
-- **Accounts:** authenticate GitHub and selected agents separately as needed.
-  Existing credentials are preserved; setup does not query authentication status.
+- **Accounts:** use the optional GitHub prompt or the linked manual steps above.
+  Authenticate selected agents separately as needed. Existing working credentials
+  are preserved.
 - **Restart recovery:** tmux does not preserve live processes through a Mac reboot.
   Save work to disk. FileVault unlock and service startup remain manual operational
   considerations, outside installation verification.

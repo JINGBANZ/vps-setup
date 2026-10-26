@@ -18,7 +18,8 @@ Tools: tailscale,mosh,tmux,git,gh,codex,claude,node,bun
 Configuration: shortcut,shell
 Linux only: security,disk-guard,runner,postgres
 Node and Bun default off. Only missing tools and outdated configuration are selectable.
-On macOS, SSH, Screen Sharing and power are manual. Sign-in is always manual.
+Interactive setup offers optional GitHub HTTPS sign-in after successful changes.
+--yes skips sign-in. On macOS, SSH, Screen Sharing and power remain manual.
 EOF
 }
 on_selected() { case "$SELECTED" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
@@ -308,7 +309,7 @@ on_summary() {
   NEXT_STEPS_SHOWN=0
   if [ "${RESULTS[10]}" = Configured ]; then on_next_step 'Open a new terminal or SSH session to load shell changes.'; fi
   if [ "${RESULTS[9]}" = Configured ]; then on_next_step 'Start or resume a session: t <name>'; fi
-  if [ "${RESULTS[4]}" = Installed ]; then on_next_step 'GitHub sign-in, if needed: gh auth login'; fi
+  if [ "${RESULTS[4]}" = Installed ]; then on_next_step 'GitHub sign-in and recovery: https://github.com/JINGBANZ/vps-setup#github-authentication'; fi
   if [ "${RESULTS[5]}" = Installed ]; then on_next_step 'Codex sign-in, if needed: codex'; fi
   if [ "${RESULTS[6]}" = Installed ]; then on_next_step 'Claude Code sign-in, if needed: claude'; fi
   platform_next_steps

@@ -102,14 +102,63 @@ Shell integration covers interactive sessions and direct SSH commands in Bash
 and Zsh, including Homebrew, native tools and nvm-managed Node. See the
 [shell startup contract](docs/shell-startup.md) for background jobs and test coverage.
 
-Open a new shell. Sign in to selected tools when needed (`sudo tailscale up`,
-`gh auth login`, `claude`, `codex`). On macOS, Remote Login, Screen Sharing,
+Interactive setup offers optional [GitHub authentication](#github-authentication)
+after successful installation or configuration. Open a new shell to load shell
+changes, and sign in to other tools when needed (`sudo tailscale up`, `claude`,
+`codex`). On macOS, Remote Login, Screen Sharing,
 power settings and Tailscale service startup stay manual: see the
 [Mac mini guide](macos/README.md) and [visual walkthrough](macos/design.html).
 
 `t task-name` creates or resumes a tmux session in `~/workspace` (override with
 `WORKSPACE_DIR`). **Ctrl-b, then d** detaches; **Ctrl-b, then s** switches sessions.
 Live sessions survive terminal disconnects, but not a server reboot.
+
+### GitHub authentication
+
+When GitHub CLI is available after successful interactive setup, a separate
+**Sign in / Skip** prompt offers to configure GitHub authentication. **Skip is
+the default.** Accepting checks the active `github.com` login, keeps working
+credentials, configures Git to use GitHub CLI for HTTPS credentials, and displays
+the final authentication status. Existing Git protocol preferences are retained;
+new logins use HTTPS and GitHub's browser/device-code flow. Over SSH, open the
+displayed GitHub URL on your own computer and enter the displayed code.
+
+On macOS, if authentication is unavailable, setup first runs
+`security unlock-keychain "$HOME/Library/Keychains/login.keychain-db"` in the
+same terminal. Enter the Mac's login Keychain password at the native prompt.
+Setup never captures or stores that password. If unlocking restores an existing
+login, no new login runs; if unlocking fails, setup stops the authentication step.
+Password prompts and device codes bypass the Linux installation log.
+
+`--check`, `--dry-run`, `--yes`, cancelled plans, failed installations, and runs
+with no selected changes never enter this step. Skipping or failing authentication
+leaves completed installation work intact and does not change its exit status.
+`GH_TOKEN` / `GITHUB_TOKEN` authentication is checked and kept, without starting
+a browser login or unlocking Keychain. A valid existing file-stored token is also
+kept; this step does not migrate credentials. Git commit name/email remain yours
+to configure separately.
+
+If you skipped the step, sign in from your workstation terminal or SSH session:
+
+```bash
+# macOS must unlock successfully before login. Linux skips the unlock command.
+if [ "$(uname -s)" != Darwin ] ||
+  security unlock-keychain "$HOME/Library/Keychains/login.keychain-db"; then
+  gh auth login --hostname github.com --git-protocol https --web &&
+    gh auth setup-git --hostname github.com &&
+    gh auth status --active --hostname github.com
+fi
+```
+
+For an existing login, start with `gh auth status --active --hostname github.com`.
+If the Mac Keychain has locked, unlock it in that same session and check again;
+you may not need to log in again. `(keyring)` in the status confirms system
+credential storage. A configuration-file path means plaintext storage: GitHub CLI
+can fall back to a file if it cannot use the system credential store. A successful
+GitHub login alone does not prove Keychain storage. See the official
+[GitHub CLI login](https://cli.github.com/manual/gh_auth_login),
+[Git credential helper](https://cli.github.com/manual/gh_auth_setup-git), and
+[Apple SSH/Keychain guidance](https://developer.apple.com/forums/thread/712005).
 
 ## Modular design
 
@@ -121,6 +170,7 @@ Both operating systems run `setup.sh` → `lib/setup.sh`:
 | `lib/setup.sh` | Shared inventory → selection → plan → apply → summary |
 | `lib/onboarding.sh` | Registry, eligibility, dependencies and managed shell configuration |
 | `lib/onboarding-ui.sh` | Shared Gum checklists and locked-item presentation |
+| `lib/github-auth.sh` | Optional interactive GitHub authentication after installation |
 | `lib/terminal-ui.sh` | Pinned Gum bootstrap, verification and cleanup |
 | `macos/platform.sh` | Apple tool detection and conditional Homebrew installation |
 | `linux/platform.sh` | apt detection, selected package installation and Linux module dispatch |
