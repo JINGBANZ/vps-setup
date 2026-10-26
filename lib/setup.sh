@@ -152,5 +152,5 @@ if [ "$failed" = 0 ]; then
   rm -f "$selection_tmp"
 fi
 on_summary
-on_offer_github_login
+if [ "$assume_yes:$failed" = 0:0 ]; then on_offer_github_login; fi
 [ "$failed" = 0 ]

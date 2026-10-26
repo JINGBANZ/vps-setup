@@ -27,7 +27,6 @@ on_github_authenticate() {
 }
 
 on_offer_github_login() {
-  [ "$assume_yes:$failed" = 0:0 ] || return 0
   on_tool gh >/dev/null || return 0
   printf '\nOptional GitHub HTTPS authentication (existing credentials are kept).\n' >&4
   if ! ui_gum confirm 'Set up GitHub authentication now?' --affirmative 'Sign in' --negative Skip --default=false --timeout=0; then
