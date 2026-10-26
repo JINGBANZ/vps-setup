@@ -98,8 +98,9 @@ may enable stopped services; this is not an assurance that services never change
 
 ## After setup
 
-Shell integration also adds a silent PATH hook to `.zshenv`, so non-interactive
-SSH commands can find Homebrew tools such as `mosh-server`.
+Shell integration covers interactive sessions and direct SSH commands in Bash
+and Zsh, including Homebrew, native tools and nvm-managed Node. See the
+[shell startup contract](docs/shell-startup.md) for background jobs and test coverage.
 
 Open a new shell. Sign in to selected tools when needed (`sudo tailscale up`,
 `gh auth login`, `claude`, `codex`). On macOS, Remote Login, Screen Sharing,
@@ -130,5 +131,6 @@ an adapter. Merely adding a numbered module file does not execute it automatical
 Native agent/runtime installers and the tmux helper are reused by both platforms.
 
 CI runs isolated installer tests and real Gum keyboard tests on Linux and macOS
-(Apple Bash 3.2), shell lint, and fresh Ubuntu apt regression tests. The behavior
+(Apple Bash 3.2), real shell/nvm startup tests, isolated SSH/Mosh/tmux tests,
+shell lint, and fresh Ubuntu apt regression tests. The behavior
 tests fake provisioning commands; they do not provision a physical Mac or VPS.

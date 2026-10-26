@@ -34,7 +34,8 @@ class MacSetup(unittest.TestCase):
         self.script('brew', '''printf 'brew %s\\n' "$*" >> "$TEST_STATE/calls"
 case "$1" in
  --version) [ "${BAD_BREW:-0}" = 0 ] && echo 'brew test' ;;
- shellenv) echo ':' ;;
+ shellenv) brew_bin="$(dirname "$0")"
+           printf 'case ":$PATH:" in *:%q:*) ;; *) export PATH=%q:"$PATH" ;; esac\\n' "$brew_bin" "$brew_bin" ;;
  list) [ -f "$TEST_STATE/formula-$3" ] ;;
  install) [ "${HOMEBREW_NO_ASK:-}" = 1 ] || { echo 'unexpected brew confirmation' >&2; exit 89; }
           [ "$3" != "${FAIL_INSTALL:-}" ] || exit 1
@@ -201,8 +202,7 @@ esac''')
         (nvm / 'nvm.sh').write_text(
             '[ "${1:-}" = --no-use ] || echo UNEXPECTED_NVM_INIT\nnvm() { :; }\n')
         self.run_setup('--select', 'shortcut', '--yes', ZDOTDIR=str(zdot))
-        # Neither nvm nor the tmux helper should load for a remote command.
-        (self.config / 'tmux.sh').write_text('echo UNEXPECTED_TMUX_INIT\n')
+        # Startup must stay silent and must not start or attach tmux sessions.
         result = subprocess.run([shutil.which('zsh'), '-uc',
                                  'mosh-server; test "$USER_SETTING" = kept; '
                                  '. "$ZDOTDIR/.zshenv"; printf "%s\\n" "$PATH"'],
@@ -212,6 +212,7 @@ esac''')
         lines = result.stdout.splitlines()
         self.assertEqual(lines[0], 'server-ready')
         self.assertEqual(len(lines), 2)
+        self.assertEqual(self.calls('tmux-calls'), '')
         self.assertEqual(lines[1].split(':').count(str(self.bin)), 1)
         self.assertEqual(profile.with_name('.zshenv.vps-setup.bak').read_text(),
                          '# custom environment\nexport USER_SETTING=kept\n')
@@ -222,7 +223,7 @@ esac''')
         before = self.snapshot()
         self.run_setup('--select', 'shell', '--yes', ZDOTDIR=str(zdot))
         self.assertEqual(before, self.snapshot())
-        self.assertEqual(profile.read_text().count('# vps-setup:path'), 1)
+        self.assertEqual(profile.read_text().count('# vps-setup:shell'), 1)
 
     def test_zshenv_symlink_requires_manual_repair(self):
         target = self.home / 'custom-env'

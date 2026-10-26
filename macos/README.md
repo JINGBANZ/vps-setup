@@ -164,10 +164,12 @@ repair needs. Rerun after addressing the failure; working tools will be locked.
 Shell changes live in `~/.config/vps-setup/`. Originals are backed up once as
 `*.vps-setup.bak`; matching files are untouched. Custom profile lines and the
 first existing Bash login profile are preserved. Exported `ZDOTDIR` is honored.
-Symlinked files needing updates remain manual. A small, silent `path.sh` is
-loaded from `.zshenv` for non-interactive Zsh commands, including Mosh startup.
-Login/interactive profiles load `env.sh`, which also initializes nvm and the
-optional tmux helper. Open a new shell after changes.
+Symlinked files needing updates remain manual. `.zshenv`, login/interactive
+profiles and the beginning of Bash’s `.bashrc` load the shared `env.sh`. It
+initializes the full Homebrew environment, native tool paths, nvm when installed,
+and the optional tmux helper without starting a session. Open a new shell after
+changes. See the [shell startup contract](../docs/shell-startup.md) for supported
+remote commands, background jobs and regression coverage.
 `WORKSPACE_DIR` must be absolute and defaults to `~/workspace`.
 
 Saved `ssh`, `screen` and `power` choices are retired with a notice; explicitly
