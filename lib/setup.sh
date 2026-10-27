@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local server installation only; no authentication or client connection probes.
+# Authentication runs only after installation and a separate interactive opt-in.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/onboarding.sh
@@ -15,6 +15,8 @@ esac
 . "$REPO_ROOT/lib/terminal-ui.sh"
 # shellcheck source=lib/onboarding-ui.sh
 . "$REPO_ROOT/lib/onboarding-ui.sh"
+# shellcheck source=lib/github-auth.sh
+. "$REPO_ROOT/lib/github-auth.sh"
 trap ui_cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -150,4 +152,5 @@ if [ "$failed" = 0 ]; then
   rm -f "$selection_tmp"
 fi
 on_summary
+if [ "$assume_yes:$failed" = 0:0 ]; then on_offer_github_login; fi
 [ "$failed" = 0 ]

@@ -22,7 +22,7 @@ REAL_GUM = os.environ.get('GUM_TEST_BIN', '')
 
 
 class Terminal:
-    def __init__(self, env, *args, piped_input=False):
+    def __init__(self, env, *args, piped_input=False, script=None):
         self.master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 38, 110, 0, 0))
 
@@ -30,7 +30,7 @@ class Terminal:
             os.setsid()
             fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
 
-        self.proc = subprocess.Popen(['/bin/bash', str(ROOT / 'setup.sh'), *args],
+        self.proc = subprocess.Popen(['/bin/bash', str(script or ROOT / 'setup.sh'), *args],
                                      stdin=subprocess.DEVNULL if piped_input else slave,
                                      stdout=slave, stderr=slave, env=env, preexec_fn=session)
         os.close(slave)
@@ -157,6 +157,8 @@ class GumTests(unittest.TestCase):
         t.expect('n Cancel')
         t.send(b'\x1b[D')  # Move from Cancel to Apply.
         time.sleep(0.1)
+        t.send(b'\r')
+        t.expect('n Skip')
         t.send(b'\r')
         out = t.finish()
         self.assertIn('Installed', out)
