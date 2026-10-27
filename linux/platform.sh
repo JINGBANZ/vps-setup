@@ -7,10 +7,10 @@ platform_init() {
     die 'Run setup without sudo as your normal user; selected Linux system modules request sudo when needed'
   fi
   command -v apt-get >/dev/null 2>&1 || die 'Linux support requires Debian/Ubuntu (apt-get)'
-  COMPONENTS+=(security disk-guard runner postgres)
-  LABELS+=('Linux security baseline' 'Disk guard (Docker cache cleanup)' 'GitHub Actions runner' 'Local PostgreSQL')
+  COMPONENTS+=(security disk-guard runner postgres tailscale-hardening)
+  LABELS+=('Linux security baseline' 'Disk guard (Docker cache cleanup)' 'GitHub Actions runner' 'Local PostgreSQL' 'Tailscale SSH forwarding protection')
   # Preserve Linux defaults, but show them explicitly and allow deselection.
-  SELECTED="$SELECTED"'security disk-guard '
+  SELECTED="$SELECTED"'security disk-guard tailscale-hardening '
   [ -z "${GH_RUNNER_REPO:-}" ] || on_select runner
   [ "${DEV_POSTGRES:-0}" != 1 ] || on_select postgres
 }
@@ -27,6 +27,7 @@ platform_detect_package() {
 platform_detect_extra() {
   DETECTED=update; DETAIL='Reconcile managed configuration; unchanged files are kept'
   case "$1" in
+    tailscale-hardening) DETAIL='Disable Tailscale SSH forwarding; restart active tailscaled (sessions may disconnect)' ;;
     security) DETAIL='Review/reconcile SSH hardening, firewall, fail2ban and security updates' ;;
     disk-guard) DETAIL='Reconcile journal cap + timer; prunes Docker build cache/dangling images at threshold' ;;
     runner)
@@ -61,6 +62,10 @@ platform_plan() {
 }
 platform_plan_component() {
   case "$1" in
+    tailscale-hardening)
+      printf '  - Disable Tailscale SSH forwarding (systemd service environment)\n'
+      printf '    Restart active tailscaled when needed; Tailscale sessions may disconnect. Verify backup access first.\n'
+      printf '    Keep login credentials and SSH enabled; leave a stopped service stopped.\n' ;;
     security)
       printf '  - Configure Linux security\n'
       printf '    Key-only SSH when an authorized key exists; firewall allows SSH %s/tcp, Mosh UDP and tailscale0.\n' "$SSH_PORT"
@@ -85,7 +90,7 @@ platform_preflight() {
       die 'Runner requires GitHub CLI or GH_RUNNER_TOKEN; select gh as well'
     fi
   fi
-  if on_selected security || on_selected disk-guard || on_selected runner || on_selected postgres; then
+  if on_selected security || on_selected disk-guard || on_selected runner || on_selected postgres || on_selected tailscale-hardening; then
     command -v systemctl >/dev/null 2>&1 || die 'Selected Linux system modules require systemd'
   fi
 }
@@ -95,6 +100,7 @@ platform_run_module() {
 }
 platform_prepare() {
   local packages item need_apt=0
+  if on_selected tailscale-hardening && [ -n "$SUDO" ]; then "$SUDO" -v || return 1; fi
   packages="$(platform_installer_dependencies)"
   for item in git tmux mosh; do if on_selected "$item"; then need_apt=1; fi; done
   if [ -n "$packages" ] || on_selected security || on_selected gh || on_selected tailscale || on_selected postgres || on_selected runner; then need_apt=1; fi
@@ -126,6 +132,11 @@ platform_install_tool() {
 }
 platform_apply_extra() {
   local failed=0
+  if on_selected tailscale-hardening; then
+    if platform_run_module modules/55-tailscale-hardening.sh; then
+      RESULTS[15]='Configured — see service verification above'
+    else RESULTS[15]='Failed — forwarding mitigation not verified'; failed=1; fi
+  fi
   if on_selected runner; then
     if platform_run_module modules/85-gh-runner.sh && [ -f /opt/actions-runner/.runner ]; then
       RESULTS[13]='Installed'
@@ -143,3 +154,4 @@ platform_apply_extra() {
 platform_next_steps() {
   if [ "${RESULTS[0]}" = Installed ]; then on_next_step 'Tailscale sign-in: sudo tailscale up'; fi
 }
+

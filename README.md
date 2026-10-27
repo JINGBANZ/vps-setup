@@ -44,6 +44,7 @@ provisioning. **There is no numbered menu.**
 | Node.js / nvm, Bun | Official installers | Same installers | Off |
 | Session shortcut `t`, shell integration | Shared managed bash/zsh configuration | Same configuration | Selected |
 | Security baseline | Not offered | Guarded SSH hardening, ufw, fail2ban, automatic security updates | Selected |
+| Tailscale SSH forwarding protection | Not offered | Disable built-in SSH forwarding; restart active tailscaled when needed | Selected |
 | Disk guard | Not offered | Journal cap and disk timer; Docker cache cleanup at threshold | Selected |
 | Actions runner, PostgreSQL | Not offered | Dedicated runner service / local database service | Off |
 
@@ -52,8 +53,9 @@ formula. A selected shortcut adds missing tmux; selected tools add shell
 integration. On Linux, missing `curl` is added only for selected network
 installers (including the runner); Bun also adds missing `unzip`. These apt
 dependencies appear in the review plan and install before dependent tools.
-Existing Tailscale
-installations and credentials are preserved. No client connectivity tests run.
+Existing Tailscale installations and credentials are preserved. The separately
+selectable forwarding protection can restart the Linux service; no client
+connectivity tests run.
 
 On Linux, security and disk guard are **configuration reconciliation** choices:
 they remain selectable so changed settings can be applied; their modules compare
@@ -86,7 +88,35 @@ Pass options through the same bootstrap command on either OS:
 configuration or installs software. `--yes` requires an explicit `--select`
 list (`none` is valid). All three modes skip Gum. IDs are
 `tailscale,mosh,tmux,git,gh,codex,claude,node,bun,shortcut,shell`, plus Linux-only
-`security,disk-guard,runner,postgres`.
+`security,disk-guard,runner,postgres,tailscale-hardening`.
+
+### Tailscale SSH forwarding protection (Linux)
+
+To apply only the [vendor-recommended forwarding mitigation](https://tailscale.com/ssh-investigation-update)
+to an existing Debian/Ubuntu systemd installation:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select tailscale-hardening --dry-run
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/JINGBANZ/vps-setup/main/bootstrap.sh)" -- --select tailscale-hardening --yes
+```
+
+Verify a backup access path (such as public-IP OpenSSH or the provider console)
+first: restarting `tailscaled` can disconnect Tailscale sessions. The selected
+step writes `/etc/systemd/system/tailscaled.service.d/90-vps-setup-no-forwarding.conf`
+with `TS_SSH_DISABLE_FORWARDING=1`, reloads systemd, and restarts an active daemon
+only when the file or running environment needs correction. It checks the running
+process for that setting without printing its environment. Conflicting service
+environment files, failed writes, reloads, restarts, or verification fail setup.
+A stopped service stays stopped; the setting applies on its next start.
+
+This disables forwarding through **Tailscale's built-in SSH server**, not ordinary
+OpenSSH forwarding. It preserves Tailscale SSH login, node credentials, and
+tailnet policy. It does not alter macOS installations. New Linux Tailscale
+installations automatically include this step; existing installations can select
+it independently even though the Tailscale installation choice is locked.
+Saved selections from earlier runs do not automatically opt into this new choice.
+This mitigation covers several reported SSH issues, not the entire report;
+install a vendor-confirmed patched client release as well.
 
 Reruns redetect tools before applying saved choices and recheck before installing.
 Working tools cannot be selected for reinstall; deselection never uninstalls.
@@ -193,3 +223,4 @@ CI runs isolated installer tests and real Gum keyboard tests on Linux and macOS
 (Apple Bash 3.2), real shell/nvm startup tests, isolated SSH/Mosh/tmux tests,
 shell lint, and fresh Ubuntu apt regression tests. The behavior
 tests fake provisioning commands; they do not provision a physical Mac or VPS.
+
