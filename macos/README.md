@@ -26,9 +26,10 @@ Open a new terminal or SSH session afterward to load shell changes automatically
 You only need `source "$HOME/.config/vps-setup/env.sh"` if you want to update the
 already-open shell immediately; it is not a command to repeat in every session.
 
-After installation, choose **Sign in** at the optional GitHub prompt to check or
+After installation, setup quietly checks your active GitHub login and skips the
+optional prompt when it is already working. Otherwise, choose **Sign in** to
 set up your login and Git HTTPS credential helper. **Skip is the default.** If
-authentication is unavailable, setup first unlocks your configured default
+you accept, setup first unlocks your configured default
 Keychain (normally the login Keychain) in that same terminal; enter its password
 only at the native prompt. SSH login does not automatically unlock Keychain.
 Working existing credentials are
@@ -193,7 +194,8 @@ Earlier power changes are not undone; any old power-settings backup is retained.
 
 These are guidance only, outside the installation menu. Setup does not inspect
 or change SSH, Mosh, Screen Sharing or network reachability. GitHub authentication
-is checked only after accepting the optional post-install prompt.
+is checked after successful interactive changes to decide whether to offer the
+optional sign-in prompt.
 `--check` reports local installation state, **not**
 a Tailscale address, sign-in status or a guarantee of remote reachability.
 

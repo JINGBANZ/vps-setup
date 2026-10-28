@@ -68,7 +68,8 @@ esac''')
             flag = '-V' if tool == 'tmux' else '--version'
             self.script(tool, f'''[ ! -f "$TEST_STATE/broken-{tool}" ] || exit 2
 if [ "${{1:-}}" = {flag} ]; then echo '{tool} test-version'; exit 0; fi
-''' + ('''printf 'tmux %s\\n' "$*" >> "$TEST_STATE/tmux-calls"
+''' + ('''[ "$*" != 'auth status --active --hostname github.com' ] || exit 1
+''' if tool == 'gh' else '') + ('''printf 'tmux %s\\n' "$*" >> "$TEST_STATE/tmux-calls"
 case "$1" in has-session) [ -f "$TEST_STATE/session" ] ;; new-session) touch "$TEST_STATE/session" ;; attach|switch-client) ;; *) exit 93 ;; esac''' if tool == 'tmux' else '''echo "forbidden tool operation $0 $*" >> "$TEST_STATE/forbidden"; exit 92'''))
         self.script('curl', '''printf 'curl %s\\n' "$*" >> "$TEST_STATE/calls"
 [ "${FAIL_DOWNLOAD:-0}" = 0 ] || exit 22
