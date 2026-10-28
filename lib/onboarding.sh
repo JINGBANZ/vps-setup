@@ -16,7 +16,7 @@ Interactive: arrows move, Space toggles, Enter continues; review Apply / Cancel.
 Interactive setup requires Gum (automatically bootstrapped; no numbered menu).
 Tools: tailscale,mosh,tmux,git,gh,codex,claude,node,bun
 Configuration: shortcut,shell
-Linux only: security,disk-guard,runner,postgres
+Linux only: security,disk-guard,runner,postgres,tailscale-hardening
 Node and Bun default off. Only missing tools and outdated configuration are selectable.
 Interactive setup offers optional GitHub HTTPS sign-in after successful changes.
 --yes skips sign-in. On macOS, SSH, Screen Sharing and power remain manual.
@@ -118,7 +118,7 @@ on_discover() {
     id="${COMPONENTS[$i]}"
     case "$id" in
       shortcut|shell) on_config_state "$id" ;;
-      security|disk-guard|runner|postgres) platform_detect_extra "$id" ;;
+      security|disk-guard|runner|postgres|tailscale-hardening) platform_detect_extra "$id" ;;
       *) on_detect_tool "$id" ;;
     esac
     STATES[$i]="$DETECTED"; DETAILS[$i]="$DETAIL"; RESULTS[$i]=''
@@ -174,7 +174,7 @@ on_plan() {
         shortcut)
           printf '  - Set up t shortcut\n'
           if [ "$WORKSPACE_DIR" != "$HOME/workspace" ]; then printf '    Sessions: %s\n' "$WORKSPACE_DIR"; fi ;;
-        security|disk-guard|runner|postgres) platform_plan_component "$id" ;;
+        security|disk-guard|runner|postgres|tailscale-hardening) platform_plan_component "$id" ;;
         *) printf '  - Install %s\n' "${LABELS[$i]}" ;;
       esac
     fi
@@ -314,3 +314,4 @@ on_summary() {
   if [ "${RESULTS[6]}" = Installed ]; then on_next_step 'Claude Code sign-in, if needed: claude'; fi
   platform_next_steps
 }
+
