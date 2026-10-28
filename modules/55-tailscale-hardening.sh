@@ -39,6 +39,11 @@ if systemctl is-active --quiet tailscaled.service; then
   fi
   ok 'Tailscale SSH forwarding disabled in the running daemon'
 else
-  ok 'Tailscale forwarding mitigation configured; service left stopped (applies on next start)'
+  # EnvironmentFile and UnsetEnvironment can override the drop-in at startup.
+  # Only the running process proves the effective value; do not start a service
+  # the operator deliberately stopped, or report an unverified setup as success.
+  warn 'Tailscale forwarding configuration written, but protection is unverified; service left stopped.'
+  warn 'When ready, start tailscaled.service and rerun --select tailscale-hardening --yes to verify protection.'
+  exit 1
 fi
 warn 'This mitigates several SSH issues; install the vendor-confirmed patched Tailscale release when available.'

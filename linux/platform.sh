@@ -65,7 +65,7 @@ platform_plan_component() {
     tailscale-hardening)
       printf '  - Disable Tailscale SSH forwarding (systemd service environment)\n'
       printf '    Restart active tailscaled when needed; Tailscale sessions may disconnect. Verify backup access first.\n'
-      printf '    Keep login credentials and SSH enabled; leave a stopped service stopped.\n' ;;
+      printf '    Keep login credentials and SSH enabled; a stopped service stays stopped and fails verification.\n' ;;
     security)
       printf '  - Configure Linux security\n'
       printf '    Key-only SSH when an authorized key exists; firewall allows SSH %s/tcp, Mosh UDP and tailscale0.\n' "$SSH_PORT"

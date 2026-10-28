@@ -107,13 +107,18 @@ with `TS_SSH_DISABLE_FORWARDING=1`, reloads systemd, and restarts an active daem
 only when the file or running environment needs correction. It checks the running
 process for that setting without printing its environment. Conflicting service
 environment files, failed writes, reloads, restarts, or verification fail setup.
-A stopped service stays stopped; the setting applies on its next start.
+A stopped service stays stopped. Its configuration is written, but setup exits
+with a failure because protection cannot be verified until the daemon is running.
+When ready, start `tailscaled.service` and rerun the hardening selection to verify
+the effective setting; other service configuration can override the drop-in.
 
 This disables forwarding through **Tailscale's built-in SSH server**, not ordinary
 OpenSSH forwarding. It preserves Tailscale SSH login, node credentials, and
-tailnet policy. It does not alter macOS installations. New Linux Tailscale
-installations automatically include this step; existing installations can select
-it independently even though the Tailscale installation choice is locked.
+tailnet policy. It does not alter macOS installations. The Linux checklist selects
+this step by default, but honors deselection. With an explicit `--select` list,
+include `tailscale-hardening` to request it (for example,
+`--select tailscale,tailscale-hardening` for a new installation). Existing
+installations can select it independently even though the installation choice is locked.
 Saved selections from earlier runs do not automatically opt into this new choice.
 This mitigation covers several reported SSH issues, not the entire report;
 install a vendor-confirmed patched client release as well.

@@ -1,6 +1,7 @@
 """Exercise the real setup engine with isolated systemd and privileged writes."""
 import importlib.util
 from pathlib import Path
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,10 +64,63 @@ esac''')
         self.assertIn('systemctl restart tailscaled.service', self.f.calls())
 
     def test_stopped_service_is_not_started(self):
-        out = self.apply(TEST_ACTIVE='0')
+        out = self.apply(TEST_ACTIVE='0', ok=False)
         self.assertTrue(self.config.exists())
         self.assertIn('service left stopped', out)
+        self.assertIn('protection is unverified', out)
+        self.assertNotIn('systemctl start', self.f.calls())
         self.assertNotIn('systemctl restart', self.f.calls())
+        self.assertFalse((self.f.config / 'selection.txt').exists())
+        # A rerun while stopped must still fail, even though the file is unchanged.
+        before = self.config.stat().st_mtime_ns
+        self.apply(TEST_ACTIVE='0', TEST_CONFLICT='1', ok=False)
+        self.assertEqual(before, self.config.stat().st_mtime_ns)
+        self.assertNotIn('systemctl restart', self.f.calls())
+        # After the operator starts it, a conflicting effective value still fails.
+        self.apply(TEST_CONFLICT='1', ok=False)
+        out = self.apply()
+        self.assertIn('disabled in the running daemon', out)
+
+    def test_explicit_and_saved_install_selection_do_not_add_hardening(self):
+        """An installation request must not silently authorize a service change."""
+        (self.f.state / 'tool-tailscale').unlink()
+        out = self.f.run_setup('--select', 'tailscale', '--dry-run')
+        self.assertIn('Install Tailscale', out)
+        self.assertNotIn('  - Disable Tailscale SSH forwarding', out)
+        self.f.config.mkdir(parents=True, exist_ok=True)
+        (self.f.config / 'selection.txt').write_text('tailscale')
+        out = self.f.run_setup('--dry-run')
+        self.assertNotIn('  - Disable Tailscale SSH forwarding', out)
+        out = self.f.run_setup('--select', 'tailscale,tailscale-hardening', '--dry-run')
+        self.assertIn('  - Disable Tailscale SSH forwarding', out)
+        self.assertEqual(self.f.calls(), '')
+
+    def test_menu_deselection_survives_final_normalization(self):
+        """Keep Tailscale selected while clearing protection in the config page."""
+        (self.f.state / 'tool-tailscale').unlink()
+        result = subprocess.run(['/bin/bash', '-euc', r'''
+REPO_ROOT="$1"; PLATFORM=linux; SELECTED=' tailscale '
+CONFIG_DIR="$HOME/.config/vps-setup"
+. "$REPO_ROOT/lib/common.sh"
+. "$REPO_ROOT/lib/onboarding.sh"
+. "$REPO_ROOT/linux/platform.sh"
+. "$REPO_ROOT/lib/onboarding-ui.sh"
+platform_init
+on_discover
+on_normalize
+on_selected tailscale-hardening
+ui_gum() {
+  case "$*" in *'Choose tools to install'*) printf 'tailscale\n' ;; esac
+  return 0
+}
+exec 4>&1
+on_gum_menu
+on_normalize
+on_selected tailscale
+! on_selected tailscale-hardening
+''', '_', str(ROOT)], env=self.f.env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.f.calls(), '')
 
     def test_absent_unit_is_failure_without_writing(self):
         self.apply(TEST_LOAD_STATE='not-found', ok=False)

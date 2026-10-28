@@ -137,8 +137,6 @@ on_normalize() {
   if on_selected shortcut; then
     case "${STATES[2]}" in missing) on_select tmux ;; broken) on_deselect shortcut; printf 'Shortcut skipped: repair existing tmux manually.\n' ;; esac
   fi
-  # New Linux Tailscale installations also receive the forwarding mitigation.
-  if [ "$PLATFORM" = linux ] && on_selected tailscale; then on_select tailscale-hardening; fi
   # Selected tools can change PATH initialization; preview that configuration work.
   for id in tailscale mosh tmux git gh codex claude node bun shortcut; do
     if on_selected "$id" && [ "${STATES[10]}" != broken ]; then
