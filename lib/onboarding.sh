@@ -18,7 +18,8 @@ Tools: tailscale,mosh,tmux,git,gh,codex,claude,node,bun
 Configuration: shortcut,shell
 Linux only: security,disk-guard,runner,postgres,tailscale-hardening
 Node and Bun default off. Only missing tools and outdated configuration are selectable.
-Interactive setup offers optional GitHub HTTPS sign-in after successful changes.
+Interactive setup offers optional GitHub HTTPS sign-in after successful changes
+only when the active github.com login is unavailable.
 --yes skips sign-in. On macOS, SSH, Screen Sharing and power remain manual.
 EOF
 }

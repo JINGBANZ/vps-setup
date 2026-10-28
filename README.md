@@ -150,9 +150,11 @@ Live sessions survive terminal disconnects, but not a server reboot.
 
 ### GitHub authentication
 
-When GitHub CLI is available after successful interactive setup, a separate
-**Sign in / Skip** prompt offers to configure GitHub authentication. **Skip is
-the default.** Accepting checks the active `github.com` login, keeps working
+When GitHub CLI is available after successful interactive setup, setup quietly
+checks the active `github.com` login. A working login skips the optional
+authentication step entirely. Otherwise, a separate **Sign in / Skip** prompt
+offers to configure GitHub authentication. **Skip is the default.** Accepting
+rechecks the active login, keeps working
 credentials, configures Git to use GitHub CLI for HTTPS credentials, and displays
 the final authentication status. Existing Git protocol preferences are retained;
 new logins use HTTPS and GitHub's browser/device-code flow. Over SSH, open the

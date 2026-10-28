@@ -28,6 +28,11 @@ on_github_authenticate() {
 
 on_offer_github_login() {
   on_tool gh >/dev/null || return 0
+  # Check before rendering the optional step. Never prompt or log credentials
+  # during this probe; valid stored and environment logins need no sign-in.
+  if gh auth status --active --hostname github.com </dev/null >/dev/null 2>&1; then
+    return 0
+  fi
   printf '\nOptional GitHub HTTPS authentication (existing credentials are kept).\n' >&4
   if ! ui_gum confirm 'Set up GitHub authentication now?' --affirmative 'Sign in' --negative Skip --default=false --timeout=0; then
     printf 'GitHub authentication skipped.\n' >&4

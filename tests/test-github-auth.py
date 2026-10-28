@@ -1,6 +1,7 @@
 """Optional login uses a real terminal/UI with isolated credential commands."""
 import importlib.util
 from pathlib import Path
+import subprocess
 import time
 import unittest
 
@@ -36,7 +37,7 @@ if [ "${UNLOCK_RESTORES_AUTH:-0}" = 1 ]; then touch "$TEST_STATE/authenticated";
 printf 'gh %s\\n' "$*" >> "$TEST_STATE/auth-calls"
 case "$*" in
  'auth status --active --hostname github.com')
-   if [ "${WAIT_FOR_STATUS:-0}" = 1 ]; then
+   if [ "${WAIT_FOR_STATUS:-0}" = 1 ] && [ -t 0 ]; then
      touch "$TEST_STATE/status-pending"
      IFS= read -r answer
    fi
@@ -100,11 +101,48 @@ esac
         self.assertTrue((self.f.config / 'selection.txt').is_file())
         self.assertFalse((self.f.state / 'forbidden').exists(), self.f.calls('forbidden'))
 
-    def test_skip_is_default_and_does_not_probe_credentials(self):
+    def test_offer_only_when_authentication_is_unavailable(self):
+        # Exercise the gate without requiring Gum or a real GitHub account.
+        script = '''
+set -eu
+source "$1/lib/github-auth.sh"
+on_tool() { [ "${TEST_GH_AVAILABLE:-1}" = 1 ]; }
+ui_gum() { printf 'SIGN-IN-PROMPT\\n' >&4; return 1; }
+exec 4>&1
+on_offer_github_login
+'''
+        for scenario in ['stored', 'GH_TOKEN', 'GITHUB_TOKEN', 'missing', 'invalid', 'no-gh']:
+            with self.subTest(scenario=scenario):
+                authenticated = self.f.state / 'authenticated'
+                authenticated.unlink(missing_ok=True)
+                (self.f.state / 'auth-calls').unlink(missing_ok=True)
+                env = dict(self.env)
+                valid = scenario in ['stored', 'GH_TOKEN', 'GITHUB_TOKEN']
+                if scenario == 'stored':
+                    authenticated.touch()
+                elif scenario in ['GH_TOKEN', 'GITHUB_TOKEN']:
+                    env.update({scenario: 'test-env-token', 'ENV_AUTH_VALID': '1'})
+                elif scenario == 'invalid':
+                    env['GH_TOKEN'] = 'invalid-test-token'
+                elif scenario == 'no-gh':
+                    env['TEST_GH_AVAILABLE'] = '0'
+                result = subprocess.run(['/bin/bash', '-c', script, '_', str(ROOT)],
+                                        env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = result.stdout + result.stderr
+                offered = not valid and scenario != 'no-gh'
+                self.assertEqual('Optional GitHub HTTPS authentication' in output, offered)
+                self.assertEqual('SIGN-IN-PROMPT' in output, offered)
+                self.assertNotIn('test-env-token', output)
+                self.assertNotIn('Logged in as tester', output)
+                self.assertEqual(self.calls(), '' if scenario == 'no-gh' else
+                                 'gh auth status --active --hostname github.com\n')
+
+    def test_skip_is_default_and_only_checks_status(self):
         t = self.offer()
         t.send(b'\r')
         self.assertIn('GitHub authentication skipped.', t.finish())
-        self.assertEqual(self.calls(), '')
+        self.assertEqual(self.calls(), 'gh auth status --active --hostname github.com\n')
         self.assert_install_preserved()
 
     def test_escape_and_ctrl_c_skip_optional_prompt(self):
@@ -113,7 +151,8 @@ esac
                 t = self.offer()
                 t.send(key)
                 self.assertIn('GitHub authentication skipped.', t.finish())
-                self.assertEqual(self.calls(), '')
+                self.assertEqual(set(self.calls().splitlines()),
+                                 {'gh auth status --active --hostname github.com'})
                 self.assert_install_preserved()
                 (self.f.config / 'env.sh').unlink()
 
@@ -144,26 +183,29 @@ esac
         self.assertNotIn('gh auth login', self.calls())
         self.assertIn('gh auth setup-git', self.calls())
 
-    def test_existing_auth_is_kept_and_helper_is_configured(self):
+    def test_existing_auth_skips_optional_step(self):
         (self.f.state / 'authenticated').touch()
-        t = self.offer()
-        self.assertEqual(self.calls(), '')
+        t = self.terminal('--select', 'shell')
+        t.expect('n Cancel')
         t.send(b'y')
-        self.assertIn('Keeping existing GitHub authentication.', t.finish())
-        self.assertNotIn('security ', self.calls())
-        self.assertNotIn('gh auth login', self.calls())
-        self.assertIn('gh auth setup-git', self.calls())
+        out = t.finish()
+        self.assertNotIn('Optional GitHub HTTPS authentication', out)
+        self.assertNotIn('Set up GitHub authentication now?', out)
+        self.assertEqual(self.calls(), 'gh auth status --active --hostname github.com\n')
+        self.assert_install_preserved()
 
     def test_environment_auth_is_preserved(self):
         self.env.update(GH_TOKEN='test-env-token', ENV_AUTH_VALID='1')
-        t = self.offer()
+        t = self.terminal('--select', 'shell')
+        t.expect('n Cancel')
         t.send(b'y')
         out = t.finish()
-        self.assertIn('Keeping GitHub authentication supplied by the environment.', out)
+        self.assertNotIn('Optional GitHub HTTPS authentication', out)
+        self.assertNotIn('Set up GitHub authentication now?', out)
         self.assertNotIn('test-env-token', out + self.calls())
         self.assertNotIn('security ', self.calls())
         self.assertNotIn('gh auth login', self.calls())
-        self.assertIn('gh auth setup-git', self.calls())
+        self.assertEqual(self.calls(), 'gh auth status --active --hostname github.com\n')
 
     def test_invalid_environment_auth_does_not_start_login(self):
         self.env['GITHUB_TOKEN'] = 'invalid-test-token'
@@ -229,12 +271,14 @@ esac
         self.assert_install_preserved()
 
     def test_helper_or_final_verification_failure_is_reported(self):
-        (self.f.state / 'authenticated').touch()
         for failure in ['FAIL_HELPER', 'FAIL_FINAL_STATUS']:
             with self.subTest(failure=failure):
+                (self.f.state / 'authenticated').unlink(missing_ok=True)
                 self.env[failure] = '1'
                 t = self.offer()
                 t.send(b'y')
+                self.unlock(t)
+                self.login(t)
                 out = t.finish()
                 self.assertIn('did not finish', out)
                 self.assertNotIn('Git credential helper verified.', out)
