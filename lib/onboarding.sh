@@ -109,6 +109,20 @@ on_config_state() {
     elif [ "$CONFIG_DIRTY" = 0 ]; then DETECTED=current; DETAIL='Configuration current'; fi
   fi
 }
+on_preview_state() {
+  local python_bin output
+  DETECTED=update; DETAIL='Host static HTML previews on this machine through private Tailscale links.'
+  [ -f "$CONFIG_DIR/preview-service.json" ] || return 0
+  python_bin="$(command -v python3 || true)"
+  if [ -z "$python_bin" ] || [ "$python_bin:$CLT_READY" = /usr/bin/python3:0 ]; then
+    DETAIL='Needs repair: Python 3 is unavailable'; return 0
+  fi
+  if output="$(PYTHONDONTWRITEBYTECODE=1 "$python_bin" "$REPO_ROOT/lib/preview_service.py" --check 2>&1)"; then
+    DETECTED=current; DETAIL="$output"
+  else
+    DETAIL="Needs repair: $output"
+  fi
+}
 on_discover() {
   local i=0 id
   platform_discover
@@ -118,7 +132,7 @@ on_discover() {
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
     id="${COMPONENTS[$i]}"
     case "$id" in
-      preview-service) DETECTED=update; DETAIL='Host static HTML previews on this machine through private Tailscale links.' ;;
+      preview-service) on_preview_state ;;
       shortcut|shell) on_config_state "$id" ;;
       security|disk-guard|runner|postgres|tailscale-hardening) platform_detect_extra "$id" ;;
       *) on_detect_tool "$id" ;;

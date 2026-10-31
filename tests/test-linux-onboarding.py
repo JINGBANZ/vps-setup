@@ -64,6 +64,18 @@ fi''')
         self.assertEqual(before, self.f.snapshot())
         self.assertEqual(self.f.calls(), '')
 
+    def test_preview_detection_skips_healthy_and_keeps_stopped_service_selectable(self):
+        self.f.preview_fixture()
+        before = self.f.snapshot()
+        self.assertIn('LOCKED Preview service', self.f.run_setup('--check'))
+        out = self.f.run_setup('--select', 'preview-service', '--yes')
+        self.assertIn('Up to date: Preview service', out)
+        self.assertIn('No changes selected.', out)
+        self.assertNotIn('preview apply', self.f.calls())
+        self.assertEqual(before, self.f.snapshot())
+        self.f.run_setup('--select', 'preview-service', '--yes', TEST_PREVIEW_STOPPED='1')
+        self.assertEqual(self.f.calls().count('preview apply'), 1)
+
     def test_inventory_plan_and_none_are_read_only(self):
         before = self.f.snapshot()
         out = self.f.run_setup('--check')

@@ -1,5 +1,6 @@
 """Preview setup safety and real static-server behavior; no host provisioning."""
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -182,6 +183,10 @@ class PreviewSetup(unittest.TestCase):
                 def run(args, privileged=False, **kwargs):
                     args = [str(a) for a in args]
                     calls.append((args, privileged))
+                    if args == [str(binary), 'version']:
+                        return 'v' + preview.CADDY_VERSION + ' test'
+                    if args == ['launchctl', 'print', 'system/' + preview.SERVICE]:
+                        return '\tstate = running\n'
                     if args[0] == 'install':
                         target = Path(args[-1])
                         if '-d' in args:
@@ -208,15 +213,18 @@ class PreviewSetup(unittest.TestCase):
                     info = tarfile.TarInfo('caddy')
                     info.size = 6
                     tar.addfile(info, io.BytesIO(b'binary'))
-                account = SimpleNamespace(pw_name='preview', pw_gid=os.getgid())
+                account = SimpleNamespace(pw_name='preview', pw_gid=os.getgid(), pw_uid=123,
+                                          pw_shell='/usr/sbin/nologin')
                 with patch.object(preview, 'Path', side_effect=lambda p: paths.get(str(p), Path(p))) as path_type, \
                      patch.object(preview.platform, 'system', return_value=system), \
                      patch.object(preview.platform, 'machine', return_value='x86_64'), \
                      patch.object(preview.shutil, 'which', return_value='/fake/tailscale'), \
                      patch.object(preview, 'run', side_effect=run), \
                      patch.object(preview, 'service_account', return_value=account), \
+                     patch.object(preview.pwd, 'getpwnam', return_value=account), \
                      patch.object(preview, 'download', side_effect=lambda url, digest: archive.getvalue() if url.endswith('.tar.gz') else b'skill'), \
-                     patch.object(preview, 'SKILL_FILES', {'SKILL.md': 'test', 'scripts/publish.py': 'test'}), \
+                     patch.object(preview, 'SKILL_FILES', dict.fromkeys(
+                         ['SKILL.md', 'scripts/publish.py'], hashlib.sha256(b'skill').hexdigest())), \
                      patch.object(preview.socket, 'socket'), \
                      patch.object(preview.subprocess, 'run', return_value=SimpleNamespace(returncode=1)), \
                      patch.object(preview, 'verify_service') as verify:
@@ -230,6 +238,59 @@ class PreviewSetup(unittest.TestCase):
                         self.assertEqual((target / 'SKILL.md').read_bytes(), b'skill')
                     saved = state / 'previews/existing.html'
                     saved.write_text('preserve')
+                    before = {str(p): p.read_bytes() for p in base.rglob('*') if p.is_file()}
+                    check_start = len(calls)
+                    with patch.object(preview, 'download') as check_download, \
+                         patch.object(preview, 'service_account') as check_account, \
+                         patch.object(preview, 'install_file') as check_write:
+                        self.assertEqual(preview.check_installation(), 'Running and configured: https://mini.test.ts.net:8443')
+                        check_download.assert_not_called()
+                        check_account.assert_not_called()
+                        check_write.assert_not_called()
+                    self.assertTrue(all(not privileged for _, privileged in calls[check_start:]))
+                    self.assertEqual(before, {str(p): p.read_bytes() for p in base.rglob('*') if p.is_file()})
+                    (state / 'previews').chmod(0o700)
+                    with self.assertRaisesRegex(ValueError, 'permissions'):
+                        preview.check_installation()
+                    (state / 'previews').chmod(0o2750)
+                    service_file = base / ('unit' if system == 'Linux' else 'daemon.plist')
+                    for damaged in [discovery, home / '.local/share/vps-setup/preview-service/skill/SKILL.md',
+                                    state / 'Caddyfile', service_file]:
+                        with self.subTest(damaged=damaged):
+                            original = damaged.read_bytes()
+                            damaged.write_bytes(b'{}')
+                            with self.assertRaises(ValueError):
+                                preview.check_installation()
+                            damaged.write_bytes(original)
+                    original = service_file.read_bytes()
+                    service_file.unlink()
+                    with self.assertRaisesRegex(ValueError, 'boot service'):
+                        preview.check_installation()
+                    service_file.write_bytes(original)
+                    target = preview.skill_targets(home)[0]
+                    target.unlink()
+                    with self.assertRaisesRegex(ValueError, 'registration'):
+                        preview.check_installation()
+                    target.symlink_to(home / '.local/share/vps-setup/preview-service/skill')
+                    original_route = routes['Web'].pop('mini.test.ts.net:8443')
+                    with self.assertRaises(ValueError):
+                        preview.check_installation()
+                    routes['Web']['mini.test.ts.net:8443'] = original_route
+                    def stopped(args, **kwargs):
+                        if args[0] == 'systemctl' or args[:2] == ['launchctl', 'print']:
+                            raise subprocess.CalledProcessError(3, args)
+                        return run(args, **kwargs)
+                    with patch.object(preview, 'run', side_effect=stopped), \
+                         self.assertRaises(subprocess.CalledProcessError):
+                        preview.check_installation()
+                    for status in [{'BackendState': 'Stopped'},
+                                   {'BackendState': 'Running', 'Self': {'DNSName': 'mini.test.ts.net.'}}]:
+                        def tailscale_not_ready(args, **kwargs):
+                            if args[:3] == ['/fake/tailscale', 'status', '--json']:
+                                return json.dumps(status)
+                            return run(args, **kwargs)
+                        with patch.object(preview, 'run', side_effect=tailscale_not_ready), self.assertRaises(ValueError):
+                            preview.check_installation()
                     preview.install(interactive=interactive)
                     self.assertEqual(saved.read_text(), 'preserve')
                     self.assertEqual(routes['Web']['mini.test.ts.net:443'], {'Handlers': {'/': {'Text': 'unrelated'}}})
