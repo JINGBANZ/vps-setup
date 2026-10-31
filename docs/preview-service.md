@@ -10,8 +10,17 @@ install, start services, fetch skill contents, or probe the network.
 ## Prerequisites and installation
 
 Tailscale must already be running and signed in with a `.ts.net` DNS name.
-Setup preserves its credentials and unrelated Serve routes. Enable tailnet HTTPS
-if Tailscale requests it, then rerun. It never enables Funnel, changes tailnet
+Setup preserves its credentials and unrelated Serve routes. If HTTPS is not yet
+enabled for the tailnet, interactive setup displays Tailscale's approval link and
+waits while you open it on your laptop. Setup continues automatically after
+approval; there is no need to rerun it. This is a one-time Tailscale account
+approval: issuing certificates publishes machine DNS names in the public
+certificate log, while preview files remain private. Later machines in the same
+HTTPS-enabled tailnet skip this approval. See
+[Tailscale's HTTPS documentation](https://tailscale.com/docs/how-to/set-up-https-certificates).
+Press Ctrl+C to cancel. With `--yes`, setup instead checks that HTTPS is already
+enabled and reports the prerequisite before installing Preview service files;
+it does not wait for browser approval. It never enables Funnel, changes tailnet
 access policies, replaces a Tailscale variant, or opens public firewall ports.
 Existing listeners on localhost:8787 or unrelated Serve/Funnel mappings on 8443
 stop setup. An existing Funnel route on any port targeting localhost:8787 also
