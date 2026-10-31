@@ -249,6 +249,13 @@ WantedBy=multi-user.target
 ''' % (account.pw_name, grp.getgrgid(account.pw_gid).gr_name, binary, config)
 
 
+def launchd_plist(binary, config, account):
+    return plistlib.dumps({'Label': SERVICE, 'ProgramArguments': [str(binary), 'run', '--config', str(config),
+                             '--adapter', 'caddyfile'], 'UserName': account.pw_name,
+                          'GroupName': grp.getgrgid(account.pw_gid).gr_name,
+                          'RunAtLoad': True, 'KeepAlive': True, 'Umask': 0o027})
+
+
 def activate(system, binary, config, account, changed):
     if system == 'Linux':
         unit = Path('/etc/systemd/system/preview-service.service')
@@ -260,11 +267,7 @@ def activate(system, binary, config, account, changed):
         run(['systemctl', 'is-active', '--quiet', 'preview-service.service'])
     else:
         path = Path('/Library/LaunchDaemons/' + SERVICE + '.plist')
-        data = plistlib.dumps({'Label': SERVICE, 'ProgramArguments': [str(binary), 'run', '--config', str(config),
-                                 '--adapter', 'caddyfile'], 'UserName': account.pw_name,
-                              'GroupName': grp.getgrgid(account.pw_gid).gr_name,
-                              'RunAtLoad': True, 'KeepAlive': True, 'Umask': 0o027})
-        changed = install_file(path, data) or changed
+        changed = install_file(path, launchd_plist(binary, config, account)) or changed
         loaded = subprocess.run(['sudo', 'launchctl', 'print', 'system/' + SERVICE],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
         if loaded and changed:
@@ -274,6 +277,64 @@ def activate(system, binary, config, account, changed):
             run(['launchctl', 'enable', 'system/' + SERVICE], privileged=True)
             run(['launchctl', 'bootstrap', 'system', path], privileged=True)
         run(['launchctl', 'print', 'system/' + SERVICE], privileged=True)
+
+
+def check_installation():
+    system = platform.system()
+    home = Path.home()
+    state = Path('/Library/Application Support/preview-service' if system == 'Darwin' else '/var/lib/preview-service')
+    public = state / 'previews'
+    canonical = home / '.local/share/vps-setup/preview-service/skill'
+    binary = Path('/usr/local/libexec/preview-service/caddy')
+    config_path = home / '.config/vps-setup/preview-service.json'
+    service_path = Path('/Library/LaunchDaemons/' + SERVICE + '.plist' if system == 'Darwin'
+                        else '/etc/systemd/system/preview-service.service')
+    for path in [state, public, state / 'owner.json', state / 'Caddyfile', canonical, binary, config_path, service_path]:
+        if path.is_symlink():
+            raise ValueError('Refusing symlink in managed installation: ' + str(path))
+    if json.loads((state / 'owner.json').read_text()) != {'owner_uid': os.getuid()}:
+        raise ValueError('Preview service belongs to another user')
+    if not public.is_dir() or (state / 'Caddyfile').read_text() != caddy_config(public):
+        raise ValueError('Preview folder or Caddy configuration needs repair')
+    account = pwd.getpwnam('_vpspreview' if system == 'Darwin' else 'vps-preview')
+    if account.pw_uid == 0 or account.pw_shell not in ('/usr/sbin/nologin', '/usr/bin/false'):
+        raise ValueError('Preview service account needs repair')
+    permissions = public.stat()
+    if (permissions.st_uid != os.getuid() or permissions.st_gid != account.pw_gid
+            or permissions.st_mode & 0o7777 != 0o2750):
+        raise ValueError('Preview folder permissions need repair')
+    expected_service = (launchd_plist(binary, state / 'Caddyfile', account) if system == 'Darwin'
+                        else systemd_unit(binary, state / 'Caddyfile', account).encode())
+    if not service_path.is_file() or service_path.read_bytes() != expected_service:
+        raise ValueError('Preview boot service needs repair')
+    for path, digest in SKILL_FILES.items():
+        if hashlib.sha256((canonical / path).read_bytes()).hexdigest() != digest:
+            raise ValueError('Preview publishing skill needs repair or update')
+    for target in skill_targets(home):
+        if not target.is_symlink() or target.resolve() != canonical.resolve():
+            raise ValueError('Preview skill registration needs repair: ' + str(target))
+    if run([binary, 'version'], timeout=5).split()[:1] != ['v' + CADDY_VERSION]:
+        raise ValueError('Preview Caddy version needs updating')
+    if system == 'Darwin':
+        service = run(['launchctl', 'print', 'system/' + SERVICE], timeout=5)
+        if 'state = running' not in [line.strip() for line in service.splitlines()]:
+            raise ValueError('Preview service is not running')
+    else:
+        run(['systemctl', 'is-active', '--quiet', 'preview-service.service'], timeout=5)
+        run(['systemctl', 'is-enabled', '--quiet', 'preview-service.service'], timeout=5)
+    tailscale, _ = find_tailscale(home)
+    status = json.loads(run([tailscale, 'status', '--json'], timeout=5))
+    dns = ((status.get('Self') or {}).get('DNSName') or '').rstrip('.')
+    if status.get('BackendState') != 'Running' or not dns.endswith('.ts.net'):
+        raise ValueError('Tailscale must be running and signed in')
+    if dns not in (status.get('CertDomains') or []):
+        raise ValueError('Tailscale HTTPS needs account approval')
+    config = {'version': 1, 'preview_root': str(public), 'base_url': 'https://' + dns + ':8443',
+              'publisher': str(canonical / 'scripts/publish.py'), 'skill_revision': SKILL_REVISION}
+    if json.loads(config_path.read_text()) != config:
+        raise ValueError('Preview service discovery needs repair or update')
+    check_routes(json.loads(run([tailscale, 'serve', 'status', '--json'], timeout=5)), dns, True, required=True)
+    return 'Running and configured: ' + config['base_url']
 
 
 def install(interactive=False):
@@ -356,10 +417,15 @@ def install(interactive=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--interactive', action='store_true', help='allow Tailscale to wait for browser approval')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--interactive', action='store_true', help='allow Tailscale to wait for browser approval')
+    mode.add_argument('--check', action='store_true', help='check installed files and local daemon status without changes')
     args = parser.parse_args()
     try:
-        install(interactive=args.interactive)
+        if args.check:
+            print(check_installation())
+        else:
+            install(interactive=args.interactive)
     except KeyboardInterrupt:
         print('Preview service cancelled.', file=sys.stderr)
         sys.exit(130)

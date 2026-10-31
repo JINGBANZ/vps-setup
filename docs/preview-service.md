@@ -3,9 +3,13 @@
 Host static HTML previews on this machine through private Tailscale links.
 
 Select **Preview service** in onboarding, or run `bash setup.sh --select
-preview-service --yes` from a checkout. The component is optional and stays
-selectable for configuration reconciliation. `--check` and `--dry-run` do not
-install, start services, fetch skill contents, or probe the network.
+preview-service --yes` from a checkout. A running, current installation appears
+as **Up to date** and is skipped, including saved or explicit selections.
+Missing, outdated, or incomplete installations remain selectable for repair.
+Detection reads the managed files, skill registrations, service-manager state,
+and local Tailscale status and routes. `--check` and `--dry-run` do not install,
+start services, fetch skill contents, or make HTTP connection probes. Detection
+does not prove that a particular laptop can access the HTTPS link.
 
 ## Prerequisites and installation
 

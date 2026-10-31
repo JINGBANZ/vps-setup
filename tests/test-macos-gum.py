@@ -274,6 +274,22 @@ esac''')
         self.assertEqual(before, self.f.snapshot())
         self.assert_no_install()
 
+    def test_healthy_preview_is_absent_from_configuration_choices(self):
+        self.use_real_gum()
+        self.f.preview_fixture()
+        t = self.terminal()
+        t.menu('Choose tools to install')
+        t.send(b'\r')
+        t.menu('Choose configuration updates')
+        self.assertNotIn(b'[ ] Preview service', t.output)
+        self.assertNotIn(b'[x] Preview service', t.output)
+        self.assertNotIn(b'Host static HTML previews', t.output)
+        self.assertIn(b'Up to date: Preview service', t.output)
+        t.send(b'\x03')
+        t.finish()
+        self.assertNotIn('preview apply', self.f.calls())
+        self.assert_no_install()
+
     def test_noninteractive_modes_never_fetch_ui(self):
         for args in [('--check',), ('--select', 'codex', '--dry-run'), ('--select', 'none', '--yes')]:
             self.f.run_setup(*args, VPS_SETUP_UI='auto')

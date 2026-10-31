@@ -138,6 +138,8 @@ Host static HTML previews on this machine through private Tailscale links.
 Select **Preview service** to install static hosting and the shared publishing
 skill for Codex and Claude Code. Each task gets a readable URL and one directory;
 revisions stay within it. Tailscale must already be running and signed in.
+A running, current Preview service is detected and skipped on reruns; incomplete
+or stopped installations remain selectable for repair.
 If tailnet HTTPS needs one-time approval, setup shows the link and continues
 automatically after approval. Unattended `--yes` setup requires HTTPS already enabled.
 See [setup, paths, agent discovery, and security](docs/preview-service.md).

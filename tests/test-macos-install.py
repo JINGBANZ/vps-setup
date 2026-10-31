@@ -129,6 +129,45 @@ esac''')
     def snapshot(self):
         return {str(p.relative_to(self.home)): p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
 
+    def preview_fixture(self):
+        self.config.mkdir(parents=True, exist_ok=True)
+        (self.config / 'preview-service.json').write_text('{}')
+        self.script('python3', '''
+case "$1" in
+ */lib/preview_service.py)
+    if [ "${2:-}" = --check ]; then
+      printf 'preview check\\n' >> "$TEST_STATE/calls"
+      if [ "${TEST_PREVIEW_STOPPED:-0}" = 1 ]; then printf 'Preview service is not running\\n'; exit 1; fi
+      printf 'Running and configured: https://mini.test.ts.net:8443\\n'
+    else
+      printf 'preview apply\\n' >> "$TEST_STATE/calls"
+    fi ;;
+ *) echo unexpected-python >> "$TEST_STATE/forbidden"; exit 90 ;;
+esac''')
+
+    def test_healthy_preview_is_locked_and_saved_or_explicit_selections_are_skipped(self):
+        self.preview_fixture()
+        (self.config / 'selection.txt').write_text('preview-service')
+        before = self.snapshot()
+        self.assertIn('LOCKED Preview service', self.run_setup('--check'))
+        for args in [('--select', 'preview-service', '--yes'), ('--select', 'preview-service', '--dry-run'),
+                     ('--dry-run',)]:
+            out = self.run_setup(*args)
+            self.assertIn('Up to date: Preview service', out)
+            self.assertIn('No changes selected.', out)
+        self.assertNotIn('preview apply', self.calls())
+        self.assertNotIn('curl ', self.calls())
+        self.assertEqual(before, self.snapshot())
+
+    def test_stopped_preview_stays_selectable_for_repair(self):
+        self.preview_fixture()
+        out = self.run_setup('--select', 'preview-service', '--check', TEST_PREVIEW_STOPPED='1')
+        self.assertIn('Needs repair: Preview service is not running', out)
+        self.assertNotIn('LOCKED Preview service', out)
+        out = self.run_setup('--select', 'preview-service', '--yes', TEST_PREVIEW_STOPPED='1')
+        self.assertIn('Configured — private static hosting and agent skills', out)
+        self.assertEqual(self.calls().count('preview apply'), 1)
+
     def test_preview_plan_and_inventory_are_read_only(self):
         before = self.snapshot()
         out = self.run_setup('--select', 'preview-service', '--dry-run')

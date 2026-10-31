@@ -83,7 +83,9 @@ on_gum_menu() {
     on_select shell
     config_title="$config_title"$'\nShell integration included (required).'
   fi
-  config_title="$config_title"$'\nPreview service: Host static HTML previews on this machine through private Tailscale links.'
+  if [ -n "${PREVIEW_INDEX:-}" ] && on_eligible "$PREVIEW_INDEX"; then
+    config_title="$config_title"$'\nPreview service: Host static HTML previews on this machine through private Tailscale links.'
+  fi
   on_gum_pick 9 "${#COMPONENTS[@]}" "$config_title" || return 1
   on_normalize
   on_stage_summary 9 "${#COMPONENTS[@]}" 'Configuration selected'
