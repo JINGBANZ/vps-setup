@@ -26,11 +26,11 @@ CADDY_SHA256 = {
     ('Darwin', 'x86_64'): '110c53e5c093e4cfce6eda787f94f23bef913c309f620fab26b4f678031841ad',
     ('Darwin', 'arm64'): 'cda3030e5d5b13eb9f0b6fb541037f633bddd958c070c5f561d7a5cccb581665',
 }
-SKILL_REVISION = '0795709eb81b1720d40811fd3eb11f0f73939fea'
+SKILL_REVISION = 'e7fdbce9b80cd3a7d0153818e2bb2c73208b15f9'
 SKILL_FILES = {
-    'SKILL.md': '77a7bdd0496fc3bc4f9088b1a3738d1b51b3bbb8b24828b434c8a4cdea23c213',
+    'SKILL.md': 'c4c81ce5bae1f381843c2cdd16eb3f58f0c2fc5bc9e9f8b7682e5ae8b7d64db6',
     'agents/openai.yaml': '18b594202ba7f5895af46a487c43f26798111bc29b8f8a3047a19e6457e1855f',
-    'scripts/publish.py': '7e098db1edc9db8b546c1e55c1410733a1c5e1c0d1e9b2c3ddd474769a3961f8',
+    'scripts/publish.py': 'e3f561d1f6214b60e4293fd834886b128ee5944eb93673d80368629673ac2b82',
 }
 LOCAL_PORT = 8787
 HTTPS_PORT = 8443
@@ -295,7 +295,7 @@ def install():
     check_skill_targets(home, canonical)
     tailscale, gui_tailscale = find_tailscale(home)
     status = json.loads(run([tailscale, 'status', '--json'], timeout=15))
-    dns = status.get('Self', {}).get('DNSName', '').rstrip('.')
+    dns = ((status.get('Self') or {}).get('DNSName') or '').rstrip('.')
     if status.get('BackendState') != 'Running' or not dns.endswith('.ts.net'):
         raise ValueError('Tailscale must be running and signed in with a tailnet DNS name; rerun after sign-in')
     routes = json.loads(run([tailscale, 'serve', 'status', '--json'], timeout=15))

@@ -67,8 +67,8 @@ reported as a conflict. Start a new agent session to discover the skill.
 The publisher takes one self-contained UTF-8 HTML file:
 
 ```bash
-python3 /path/from/config/publish.py --new --task jarvis-connections ./mockup.html
-python3 /path/from/config/publish.py --task jarvis-connections ./revised.html
+python3 /path/from/config/publish.py --new --task pricing-page-redesign ./mockup.html
+python3 /path/from/config/publish.py --task pricing-page-redesign ./revised.html
 ```
 
 A task has one readable directory. `v1.html`, `v2.html`, etc. are immutable

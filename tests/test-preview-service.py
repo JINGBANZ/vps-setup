@@ -22,6 +22,24 @@ spec.loader.exec_module(preview)
 
 
 class PreviewSetup(unittest.TestCase):
+    def test_missing_tailscale_identity_reports_sign_in_before_installing(self):
+        for identity in [None, {}, {'DNSName': None}]:
+            with self.subTest(identity=identity), tempfile.TemporaryDirectory() as directory:
+                home = Path(directory) / 'home'
+                paths = {'/var/lib/preview-service': Path(directory) / 'state'}
+                with patch.object(preview, 'Path', side_effect=lambda p: paths.get(str(p), Path(p))) as path_type, \
+                     patch.object(preview.platform, 'system', return_value='Linux'), \
+                     patch.object(preview.platform, 'machine', return_value='x86_64'), \
+                     patch.object(preview, 'find_tailscale', return_value=('/fake/tailscale', False)), \
+                     patch.object(preview, 'run', return_value=json.dumps({'BackendState': 'NeedsLogin', 'Self': identity})) as run, \
+                     patch.object(preview, 'download') as download:
+                    path_type.home.return_value = home
+                    with self.assertRaisesRegex(ValueError, 'rerun after sign-in'):
+                        preview.install()
+                    run.assert_called_once_with(['/fake/tailscale', 'status', '--json'], timeout=15)
+                    download.assert_not_called()
+                    self.assertFalse(home.exists())
+
     def test_user_local_and_symlinked_tailscale_apps_are_recognized(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

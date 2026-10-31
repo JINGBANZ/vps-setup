@@ -139,6 +139,15 @@ esac''')
         self.assertTrue(all(line.startswith(('brew --version', 'brew shellenv', 'brew list'))
                             for line in self.calls().splitlines()), self.calls())
 
+    def test_preview_rejects_apple_python_placeholder_before_changes(self):
+        self.bashenv.write_text(self.bashenv.read_text().replace(
+            'command() {', 'command() {\n'
+            ' if [ "${1:-}" = -v ] && [ "${2:-}" = python3 ]; then echo /usr/bin/python3; return 0; fi'))
+        before = self.snapshot()
+        out = self.run_setup('--select', 'preview-service', '--yes', ok=False, NO_CLT='1')
+        self.assertIn('Preview service requires Python 3 from Command Line Tools; no changes applied', out)
+        self.assertEqual(before, self.snapshot())
+
     def test_locked_and_read_only(self):
         before = self.snapshot()
         out = self.run_setup('--check')
