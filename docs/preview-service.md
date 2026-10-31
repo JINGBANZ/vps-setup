@@ -14,7 +14,10 @@ Setup preserves its credentials and unrelated Serve routes. Enable tailnet HTTPS
 if Tailscale requests it, then rerun. It never enables Funnel, changes tailnet
 access policies, replaces a Tailscale variant, or opens public firewall ports.
 Existing listeners on localhost:8787 or unrelated Serve/Funnel mappings on 8443
-stop setup. A failed apply exits nonzero; completed installation work remains
+stop setup. An existing Funnel route on any port targeting localhost:8787 also
+stops setup, including foreground routes, so starting Caddy cannot activate a
+previously unavailable public preview backend. A failed apply exits nonzero;
+completed installation work remains
 available for a rerun, and a discovery file is written only after configuration
 succeeds.
 

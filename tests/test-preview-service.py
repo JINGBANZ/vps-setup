@@ -74,6 +74,23 @@ class PreviewSetup(unittest.TestCase):
                 preview.check_skill_targets(home, canonical)
             self.assertEqual((target / 'SKILL.md').read_text(), 'personal skill')
 
+    def test_public_routes_cannot_expose_the_reserved_preview_backend(self):
+        address = 'mini.test.ts.net:443'
+        for target in ['http://127.0.0.1:8787', 'http://localhost:8787/task/', 'http://127.0.0.1:9000']:
+            config = {'AllowFunnel': {address: True}, 'TCP': {'443': {'HTTPS': True}},
+                      'Web': {address: {'Handlers': {'/': {'Proxy': target}}}}}
+            for routes in [config, {'Foreground': {'session': config}}]:
+                with self.subTest(target=target, routes=routes):
+                    if target.endswith(':9000'):
+                        preview.check_routes(routes, 'mini.test.ts.net', False)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'Funnel route targets'):
+                            preview.check_routes(routes, 'mini.test.ts.net', False)
+        tcp = {'AllowFunnel': {address: True},
+               'TCP': {'443': {'TCPForward': '127.0.0.1:8787', 'TerminateTLS': 'mini.test.ts.net'}}}
+        with self.assertRaisesRegex(ValueError, 'Funnel route targets'):
+            preview.check_routes(tcp, 'mini.test.ts.net', False)
+
     def test_config_writes_are_private_and_refuse_symlinks(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config.json'

@@ -85,7 +85,25 @@ http://:8787 {
 ''' % json.dumps(str(root))
 
 
+def check_public_backends(config):
+    for address, enabled in config.get('AllowFunnel', {}).items():
+        if not enabled:
+            continue
+        handlers = config.get('Web', {}).get(address, {}).get('Handlers', {})
+        targets = [handler['Proxy'] for handler in handlers.values() if handler.get('Proxy')]
+        tcp = config.get('TCP', {}).get(address.rsplit(':', 1)[-1], {})
+        if tcp.get('TCPForward'):
+            targets.append(tcp['TCPForward'])
+        for target in targets:
+            upstream = urllib.parse.urlsplit(target if '://' in target else '//' + target)
+            if upstream.hostname in ('127.0.0.1', 'localhost') and upstream.port == LOCAL_PORT:
+                raise ValueError('Existing Funnel route targets localhost:8787; resolve it manually before setup')
+    for foreground in config.get('Foreground', {}).values():
+        check_public_backends(foreground)
+
+
 def check_routes(config, dns, managed, required=False):
+    check_public_backends(config)
     for address, enabled in config.get('AllowFunnel', {}).items():
         if address.endswith(':' + str(HTTPS_PORT)) and enabled:
             raise ValueError('Port 8443 has Funnel enabled; resolve it manually before setup')
