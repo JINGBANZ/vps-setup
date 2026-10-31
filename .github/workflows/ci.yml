@@ -34,6 +34,21 @@ jobs:
       - name: Install Zsh for the startup matrix
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y zsh
+      - name: Prepare verified Caddy for loopback smoke tests
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import platform
+          import sys
+          sys.path.insert(0, 'lib')
+          from preview_service import caddy_binary
+          binary = Path(os.environ['RUNNER_TEMP']) / 'preview-test-caddy'
+          binary.write_bytes(caddy_binary(platform.system(), platform.machine()))
+          binary.chmod(0o700)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('PREVIEW_TEST_CADDY=' + str(binary) + '\n')
+          PY
       - name: Shared Linux/macOS onboarding (isolated provisioning commands)
         # Use Apple's Bash 3.2 on macOS, rather than Homebrew's newer bash.
         run: |

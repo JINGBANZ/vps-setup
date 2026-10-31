@@ -76,6 +76,11 @@ platform_plan() {
   fi
 }
 platform_preflight() {
+  local python_bin
+  if on_selected preview-service; then
+    python_bin="$(command -v python3 || true)"
+    { [ -n "$python_bin" ] && [ "$python_bin:$CLT_READY" != /usr/bin/python3:0 ]; } || die 'Preview service requires Python 3 from Command Line Tools; no changes applied'
+  fi
   if [ "$NEED_BREW" = 1 ]; then
     [ "$CLT_READY" = 1 ] || die 'Finish xcode-select --install first; no changes applied'
     [ "$BREW_BROKEN" = 0 ] || die 'Repair existing Homebrew first; no changes applied'

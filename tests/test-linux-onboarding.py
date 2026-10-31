@@ -55,6 +55,15 @@ fi''')
         for tool in ['brew', 'xcode-select']:
             self.f.script(tool, 'echo "mac-only $0" >> "$TEST_STATE/forbidden"; exit 90')
 
+    def test_preview_plan_and_inventory_are_read_only(self):
+        before = self.f.snapshot()
+        out = self.f.run_setup('--select', 'preview-service', '--dry-run')
+        self.assertIn('Host static HTML previews on this machine through private Tailscale links.', out)
+        self.assertIn('private Tailscale HTTPS :8443', out)
+        self.assertIn('Preview service', self.f.run_setup('--check'))
+        self.assertEqual(before, self.f.snapshot())
+        self.assertEqual(self.f.calls(), '')
+
     def test_inventory_plan_and_none_are_read_only(self):
         before = self.f.snapshot()
         out = self.f.run_setup('--check')

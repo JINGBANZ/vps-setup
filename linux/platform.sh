@@ -52,6 +52,7 @@ platform_installer_dependencies() {
     done
   fi
   if on_selected bun && ! have unzip; then packages="${packages:+$packages }unzip"; fi
+  if on_selected preview-service && ! have python3; then packages="${packages:+$packages }python3"; fi
   printf '%s' "$packages"
 }
 platform_plan() {
@@ -90,7 +91,7 @@ platform_preflight() {
       die 'Runner requires GitHub CLI or GH_RUNNER_TOKEN; select gh as well'
     fi
   fi
-  if on_selected security || on_selected disk-guard || on_selected runner || on_selected postgres || on_selected tailscale-hardening; then
+  if on_selected security || on_selected disk-guard || on_selected runner || on_selected postgres || on_selected tailscale-hardening || on_selected preview-service; then
     command -v systemctl >/dev/null 2>&1 || die 'Selected Linux system modules require systemd'
   fi
 }
