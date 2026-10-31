@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Install the explicitly selected, host-local Preview service."""
+import argparse
 import grp
 import hashlib
 import io
@@ -37,10 +38,12 @@ HTTPS_PORT = 8443
 SERVICE = 'org.jingbanz.preview-service'
 
 
-def run(args, privileged=False, **kwargs):
+def run(args, privileged=False, capture_output=True, **kwargs):
     prefix = ['sudo'] if privileged and os.geteuid() != 0 else []
-    return subprocess.run(prefix + [str(a) for a in args], check=True, text=True,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs).stdout.strip()
+    output = subprocess.PIPE if capture_output else None
+    result = subprocess.run(prefix + [str(a) for a in args], check=True, text=True,
+                            stdout=output, stderr=output, **kwargs)
+    return (result.stdout or '').strip()
 
 
 def download(url, digest):
@@ -273,7 +276,7 @@ def activate(system, binary, config, account, changed):
         run(['launchctl', 'print', 'system/' + SERVICE], privileged=True)
 
 
-def install():
+def install(interactive=False):
     system, machine = platform.system(), platform.machine()
     if (system, machine) not in CADDY_SHA256:
         raise ValueError('Preview service does not support this platform: %s %s' % (system, machine))
@@ -298,6 +301,11 @@ def install():
     dns = ((status.get('Self') or {}).get('DNSName') or '').rstrip('.')
     if status.get('BackendState') != 'Running' or not dns.endswith('.ts.net'):
         raise ValueError('Tailscale must be running and signed in with a tailnet DNS name; rerun after sign-in')
+    https_ready = dns in (status.get('CertDomains') or [])
+    if not https_ready and not interactive:
+        raise ValueError('Tailscale HTTPS needs one-time account approval. Rerun setup without --yes '
+                         'to approve and continue automatically, or enable HTTPS Certificates at '
+                         'https://login.tailscale.com/admin/dns before unattended setup.')
     routes = json.loads(run([tailscale, 'serve', 'status', '--json'], timeout=15))
     check_routes(routes, dns, managed)
     try:
@@ -320,9 +328,14 @@ def install():
     run([binary, 'validate', '--config', server_config, '--adapter', 'caddyfile'])
     activate(system, binary, server_config, account, changed)
     verify_service(public, dns)
+    if not https_ready:
+        print('Tailscale HTTPS needs one-time account approval. Open the link below on your laptop.\n'
+              'Certificate issuance publishes this machine\'s DNS name; preview files stay private.\n'
+              'Setup will continue automatically after approval. Press Ctrl+C to cancel.', flush=True)
     # The endpoint is fixed: unrelated routes are never reset or replaced.
     run([tailscale, 'serve', '--bg', '--https=8443', '--yes', 'http://127.0.0.1:8787'],
-        privileged=not gui_tailscale, timeout=30)
+        privileged=not gui_tailscale, capture_output=False,
+        timeout=None if interactive and not https_ready else 30)
     check_routes(json.loads(run([tailscale, 'serve', 'status', '--json'], timeout=15)), dns, True, required=True)
     for path, data in skill.items():
         write_user(canonical / path, data, 0o644)
@@ -342,8 +355,14 @@ def install():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--interactive', action='store_true', help='allow Tailscale to wait for browser approval')
+    args = parser.parse_args()
     try:
-        install()
+        install(interactive=args.interactive)
+    except KeyboardInterrupt:
+        print('Preview service cancelled.', file=sys.stderr)
+        sys.exit(130)
     except subprocess.CalledProcessError as error:
         print('Preview service: ' + (error.stderr or error.stdout or str(error)), file=sys.stderr)
         sys.exit(1)

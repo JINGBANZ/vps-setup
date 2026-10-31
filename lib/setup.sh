@@ -149,7 +149,9 @@ if on_selected shell; then
 fi
 platform_apply_extra || failed=1
 if on_selected preview-service; then
-  if python3 "$REPO_ROOT/lib/preview_service.py"; then
+  preview_interactive=''
+  if [ "$assume_yes" = 0 ]; then preview_interactive=--interactive; fi
+  if python3 "$REPO_ROOT/lib/preview_service.py" ${preview_interactive:+"$preview_interactive"}; then
     RESULTS[$PREVIEW_INDEX]='Configured — private static hosting and agent skills'
   else RESULTS[$PREVIEW_INDEX]='Failed — resolve the reported prerequisite and rerun'; failed=1; fi
 fi

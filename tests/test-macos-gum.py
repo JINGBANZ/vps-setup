@@ -177,6 +177,23 @@ class GumTests(unittest.TestCase):
         self.assertEqual(before, self.f.snapshot())
         self.assert_no_install()
 
+    def test_interactive_preview_allows_approval_with_piped_stdin(self):
+        self.use_real_gum()
+        self.f.script('python3', '''
+case "$1" in
+ */lib/preview_service.py) [ "$#" = 2 ] && [ "$2" = --interactive ] || exit 81
+    printf 'preview configured\\n' ;;
+ *) echo unexpected-python >> "$TEST_STATE/forbidden"; exit 90 ;;
+esac''')
+        t = self.terminal('--select', 'preview-service', piped_input=True)
+        t.expect('n Cancel')
+        t.send(b'y')
+        t.expect('preview configured')
+        t.expect('n Skip')
+        t.send(b'\r')
+        self.assertIn('Configured — private static hosting and agent skills', t.finish())
+        self.assert_no_install()
+
     def test_empty_selection_and_piped_stdin(self):
         self.use_real_gum()
         (self.f.state / 'tool-tmux').unlink()

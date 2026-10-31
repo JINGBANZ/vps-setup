@@ -148,6 +148,17 @@ esac''')
         self.assertIn('Preview service requires Python 3 from Command Line Tools; no changes applied', out)
         self.assertEqual(before, self.snapshot())
 
+    def test_unattended_preview_does_not_request_browser_approval(self):
+        self.script('python3', '''
+case "$1" in
+ */lib/preview_service.py) [ "$#" = 1 ] || exit 81
+    printf 'preview configured\\n' ;;
+ *) echo unexpected-python >> "$TEST_STATE/forbidden"; exit 90 ;;
+esac''')
+        out = self.run_setup('--select', 'preview-service', '--yes')
+        self.assertIn('preview configured', out)
+        self.assertIn('Configured — private static hosting and agent skills', out)
+
     def test_locked_and_read_only(self):
         before = self.snapshot()
         out = self.run_setup('--check')

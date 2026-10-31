@@ -4,8 +4,10 @@ import io
 import json
 import os
 from pathlib import Path
+import select
 import socket
 import subprocess
+import sys
 import tempfile
 import tarfile
 import time
@@ -22,6 +24,48 @@ spec.loader.exec_module(preview)
 
 
 class PreviewSetup(unittest.TestCase):
+    def test_unattended_setup_reports_https_approval_before_installing(self):
+        for cert_domains in [None, [], ['another.test.ts.net']]:
+            with self.subTest(cert_domains=cert_domains), tempfile.TemporaryDirectory() as directory:
+                home = Path(directory) / 'home'
+                paths = {'/var/lib/preview-service': Path(directory) / 'state'}
+                status = {'BackendState': 'Running', 'Self': {'DNSName': 'mini.test.ts.net.'},
+                          'CertDomains': cert_domains}
+                with patch.object(preview, 'Path', side_effect=lambda p: paths.get(str(p), Path(p))) as path_type, \
+                     patch.object(preview.platform, 'system', return_value='Linux'), \
+                     patch.object(preview.platform, 'machine', return_value='x86_64'), \
+                     patch.object(preview, 'find_tailscale', return_value=('/fake/tailscale', False)), \
+                     patch.object(preview, 'run', return_value=json.dumps(status)) as run, \
+                     patch.object(preview, 'download') as download, \
+                     patch.object(preview, 'service_account') as account:
+                    path_type.home.return_value = home
+                    with self.assertRaisesRegex(ValueError, 'https://login.tailscale.com/admin/dns'):
+                        preview.install()
+                    run.assert_called_once_with(['/fake/tailscale', 'status', '--json'], timeout=15)
+                    download.assert_not_called()
+                    account.assert_not_called()
+                    self.assertFalse(home.exists())
+                    self.assertFalse(paths['/var/lib/preview-service'].exists())
+
+    def test_approval_output_is_visible_while_command_waits_and_then_continues(self):
+        child = 'print("https://login.tailscale.com/f/serve?node=test", flush=True); input(); print("continued")'
+        script = ('import sys; sys.path.insert(0, %r); import preview_service; '
+                  'preview_service.run([sys.executable, "-u", "-c", %r], capture_output=False)' %
+                  (str(ROOT / 'lib'), child))
+        with subprocess.Popen([sys.executable, '-u', '-c', script], stdin=subprocess.PIPE,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as process:
+            try:
+                self.assertTrue(select.select([process.stdout], [], [], 5)[0], 'approval link was hidden')
+                self.assertEqual(process.stdout.readline().strip(), 'https://login.tailscale.com/f/serve?node=test')
+                self.assertIsNone(process.poll())
+                output, _ = process.communicate('approved\n', timeout=5)
+                self.assertEqual(process.returncode, 0, output)
+                self.assertIn('continued', output)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate()
+
     def test_missing_tailscale_identity_reports_sign_in_before_installing(self):
         for identity in [None, {}, {'DNSName': None}]:
             with self.subTest(identity=identity), tempfile.TemporaryDirectory() as directory:
@@ -123,8 +167,8 @@ class PreviewSetup(unittest.TestCase):
             self.assertEqual(other.read_text(), 'preserve')
 
     def test_installer_registers_discovery_and_preserves_previews_on_rerun(self):
-        for system in ['Linux', 'Darwin']:
-            with self.subTest(system=system), tempfile.TemporaryDirectory() as directory:
+        for system, interactive in [('Linux', False), ('Darwin', False), ('Linux', True), ('Darwin', True)]:
+            with self.subTest(system=system, interactive=interactive), tempfile.TemporaryDirectory() as directory:
                 base = Path(directory)
                 home = base / 'home'
                 state = base / 'state'
@@ -147,10 +191,15 @@ class PreviewSetup(unittest.TestCase):
                         target.chmod(int(args[args.index('-m') + 1], 8))
                     elif args[0] == '/fake/tailscale':
                         if args[1:3] == ['status', '--json']:
-                            return json.dumps({'BackendState': 'Running', 'Self': {'DNSName': 'mini.test.ts.net.'}})
+                            ready = not interactive or '8443' in routes.get('TCP', {})
+                            return json.dumps({'BackendState': 'Running', 'Self': {'DNSName': 'mini.test.ts.net.'},
+                                               'CertDomains': ['mini.test.ts.net'] if ready else None})
                         if args[1:4] == ['serve', 'status', '--json']:
                             return json.dumps(routes)
                         self.assertEqual(args[1:], ['serve', '--bg', '--https=8443', '--yes', 'http://127.0.0.1:8787'])
+                        self.assertFalse(kwargs['capture_output'])
+                        awaiting_approval = interactive and '8443' not in routes.get('TCP', {})
+                        self.assertEqual(kwargs['timeout'], None if awaiting_approval else 30)
                         routes['Web']['mini.test.ts.net:8443'] = {'Handlers': {'/': {'Proxy': 'http://127.0.0.1:8787'}}}
                         routes['TCP'] = {'8443': {'HTTPS': True}}
                     return ''
@@ -172,7 +221,7 @@ class PreviewSetup(unittest.TestCase):
                      patch.object(preview.subprocess, 'run', return_value=SimpleNamespace(returncode=1)), \
                      patch.object(preview, 'verify_service') as verify:
                     path_type.home.return_value = home
-                    preview.install()
+                    preview.install(interactive=interactive)
                     discovery = home / '.config/vps-setup/preview-service.json'
                     config = json.loads(discovery.read_text())
                     self.assertEqual(config['preview_root'], str(state / 'previews'))
@@ -181,7 +230,7 @@ class PreviewSetup(unittest.TestCase):
                         self.assertEqual((target / 'SKILL.md').read_bytes(), b'skill')
                     saved = state / 'previews/existing.html'
                     saved.write_text('preserve')
-                    preview.install()
+                    preview.install(interactive=interactive)
                     self.assertEqual(saved.read_text(), 'preserve')
                     self.assertEqual(routes['Web']['mini.test.ts.net:443'], {'Handlers': {'/': {'Text': 'unrelated'}}})
                     self.assertEqual(verify.call_count, 2)
