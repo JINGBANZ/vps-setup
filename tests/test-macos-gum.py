@@ -169,7 +169,10 @@ class GumTests(unittest.TestCase):
         t.menu('Choose tools to install')
         self.assertNotIn(b'[x] Mosh', t.output)
         self.assertNotIn(b'[ ] Mosh', t.output)
-        t.send(b'\r')  # No changes: skip confirmation.
+        t.send(b'\r')
+        t.menu('Choose configuration updates')
+        self.assertIn(b'[ ] Preview service', t.output)
+        t.send(b'\r')  # Preview service stays opt-in; no changes.
         t.finish()
         self.assertEqual(before, self.f.snapshot())
         self.assert_no_install()
@@ -186,7 +189,9 @@ class GumTests(unittest.TestCase):
         t.expect('[ ] tmux')
         t.send(b'\r')  # No tools; the pending shortcut must not reselect tmux yet.
         t.menu('Choose configuration updates')
-        t.send(b'\x01')  # Ctrl-A deselects both configuration entries.
+        t.send(b'\x01')
+        t.expect('[x] Preview service')
+        t.send(b'\x01')  # Deselect all configuration entries, including Preview service.
         t.expect('[ ] Session shortcut: t')
         t.send(b'\r')
         out = t.finish()
@@ -234,7 +239,7 @@ class GumTests(unittest.TestCase):
         self.assertEqual(before, self.f.snapshot())
         self.assert_no_install()
 
-    def test_all_present_and_broken_items_skip_checklists(self):
+    def test_all_tools_present_still_offers_optional_preview_service(self):
         self.use_real_gum()
         self.f.run_setup('--select', 'shortcut', '--yes')
         self.f.install('node', 'bun')
@@ -242,10 +247,13 @@ class GumTests(unittest.TestCase):
         (self.f.state / 'calls').write_text('')
         before = self.f.snapshot()
         t = self.terminal()
+        t.menu('Choose configuration updates')
+        self.assertIn(b'[ ] Preview service', t.output)
+        t.send(b'\r')
         out = t.finish()
         self.assertIn('Needs repair: Codex — Unusable', out)
         self.assertNotIn('Choose tools to install', out)
-        self.assertNotIn('Choose configuration updates', out)
+        self.assertIn('Host static HTML previews on this machine through private Tailscale links.', out)
         self.assertEqual(before, self.f.snapshot())
         self.assert_no_install()
 

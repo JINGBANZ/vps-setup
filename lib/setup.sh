@@ -22,6 +22,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 SELECTED=' tailscale mosh tmux git gh codex claude shortcut shell '
 platform_init
+PREVIEW_INDEX=${#COMPONENTS[@]}
+COMPONENTS+=(preview-service)
+LABELS+=('Preview service')
 explicit=0; assume_yes=0; dry_run=0; check_only=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -145,6 +148,11 @@ if on_selected shell; then
   else RESULTS[10]='Failed: review shell configuration'; failed=1; fi
 fi
 platform_apply_extra || failed=1
+if on_selected preview-service; then
+  if python3 "$REPO_ROOT/lib/preview_service.py"; then
+    RESULTS[$PREVIEW_INDEX]='Configured — private static hosting and agent skills'
+  else RESULTS[$PREVIEW_INDEX]='Failed — resolve the reported prerequisite and rerun'; failed=1; fi
+fi
 if [ "$failed" = 0 ]; then
   selection_tmp="$(mktemp)"
   printf '%s\n' "$SELECTED" > "$selection_tmp"

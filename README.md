@@ -46,6 +46,7 @@ provisioning. **There is no numbered menu.**
 | Security baseline | Not offered | Guarded SSH hardening, ufw, fail2ban, automatic security updates | Selected |
 | Tailscale SSH forwarding protection | Not offered | Disable built-in SSH forwarding; restart active tailscaled when needed | Selected |
 | Disk guard | Not offered | Journal cap and disk timer; Docker cache cleanup at threshold | Selected |
+| Preview service | Caddy + private Tailscale HTTPS + agent skill | Same | Off |
 | Actions runner, PostgreSQL | Not offered | Dedicated runner service / local database service | Off |
 
 Homebrew is a conditional dependency, installed only for a selected missing
@@ -87,7 +88,7 @@ Pass options through the same bootstrap command on either OS:
 `--check` shows installed versions, paths and repair details; `--dry-run` prints a plan. Neither writes
 configuration or installs software. `--yes` requires an explicit `--select`
 list (`none` is valid). All three modes skip Gum. IDs are
-`tailscale,mosh,tmux,git,gh,codex,claude,node,bun,shortcut,shell`, plus Linux-only
+`tailscale,mosh,tmux,git,gh,codex,claude,node,bun,shortcut,shell,preview-service`, plus Linux-only
 `security,disk-guard,runner,postgres,tailscale-hardening`.
 
 ### Tailscale SSH forwarding protection (Linux)
@@ -130,6 +131,14 @@ preserved. Symlinked profiles needing changes require manual integration.
 Failures exit nonzero; fix the reported issue and rerun. Linux installation output
 is saved to `~/vps-setup.log` (override with `LOGFILE`). Configuration reconciliation
 may enable stopped services; this is not an assurance that services never change.
+
+## Preview service
+
+Host static HTML previews on this machine through private Tailscale links.
+Select **Preview service** to install static hosting and the shared publishing
+skill for Codex and Claude Code. Each task gets a readable URL and one directory;
+revisions stay within it. Tailscale must already be running and signed in.
+See [setup, paths, agent discovery, and security](docs/preview-service.md).
 
 ## After setup
 

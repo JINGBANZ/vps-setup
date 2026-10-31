@@ -45,7 +45,13 @@ esac''')
         # Missing tool stubs are discovered as commands only after installed.
         # command -v is intercepted by a shell function supplied via BASH_ENV.
         self.bashenv = self.base / 'bashenv'
-        self.bashenv.write_text('''command() {
+        self.bashenv.write_text('''[() {
+ case "${2:-}" in
+   /Applications/Tailscale.app|/Library/LaunchDaemons/com.tailscale.tailscaled.plist) return 1 ;;
+ esac
+ builtin [ "$@"
+}
+command() {
  if [ "${1:-}" = -v ]; then
    if [ "${2:-}" = node ] && [ "${TEST_NVM_GLOB:-0}" = 1 ]; then
      local node_path
@@ -122,6 +128,16 @@ esac''')
 
     def snapshot(self):
         return {str(p.relative_to(self.home)): p.read_bytes() for p in self.home.rglob('*') if p.is_file()}
+
+    def test_preview_plan_and_inventory_are_read_only(self):
+        before = self.snapshot()
+        out = self.run_setup('--select', 'preview-service', '--dry-run')
+        self.assertIn('Host static HTML previews on this machine through private Tailscale links.', out)
+        self.assertIn('private Tailscale HTTPS :8443', out)
+        self.assertIn('Preview service', self.run_setup('--check'))
+        self.assertEqual(before, self.snapshot())
+        self.assertTrue(all(line.startswith(('brew --version', 'brew shellenv', 'brew list'))
+                            for line in self.calls().splitlines()), self.calls())
 
     def test_locked_and_read_only(self):
         before = self.snapshot()

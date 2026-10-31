@@ -15,7 +15,7 @@ Usage: bash setup.sh [options] (normal user; Linux requests sudo as needed)
 Interactive: arrows move, Space toggles, Enter continues; review Apply / Cancel.
 Interactive setup requires Gum (automatically bootstrapped; no numbered menu).
 Tools: tailscale,mosh,tmux,git,gh,codex,claude,node,bun
-Configuration: shortcut,shell
+Configuration: shortcut,shell,preview-service
 Linux only: security,disk-guard,runner,postgres,tailscale-hardening
 Node and Bun default off. Only missing tools and outdated configuration are selectable.
 Interactive setup offers optional GitHub HTTPS sign-in after successful changes
@@ -118,6 +118,7 @@ on_discover() {
   while [ "$i" -lt "${#COMPONENTS[@]}" ]; do
     id="${COMPONENTS[$i]}"
     case "$id" in
+      preview-service) DETECTED=update; DETAIL='Host static HTML previews on this machine through private Tailscale links.' ;;
       shortcut|shell) on_config_state "$id" ;;
       security|disk-guard|runner|postgres|tailscale-hardening) platform_detect_extra "$id" ;;
       *) on_detect_tool "$id" ;;
@@ -172,6 +173,11 @@ on_plan() {
     if on_selected "$id"; then
       case "$id" in
         shell) printf '  - Configure shell PATH and startup\n' ;;
+        preview-service)
+          printf '  - Configure Preview service\n'
+          printf '    Host static HTML previews on this machine through private Tailscale links.\n'
+          printf '    Install verified Caddy + skills; start a non-root boot service on localhost:8787.\n'
+          printf '    Configure private Tailscale HTTPS :8443; requires an existing signed-in connection.\n' ;;
         shortcut)
           printf '  - Set up t shortcut\n'
           if [ "$WORKSPACE_DIR" != "$HOME/workspace" ]; then printf '    Sessions: %s\n' "$WORKSPACE_DIR"; fi ;;

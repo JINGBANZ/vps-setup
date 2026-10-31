@@ -76,6 +76,9 @@ platform_plan() {
   fi
 }
 platform_preflight() {
+  if on_selected preview-service; then
+    command -v python3 >/dev/null 2>&1 || die 'Preview service requires Python 3 from Command Line Tools; no changes applied'
+  fi
   if [ "$NEED_BREW" = 1 ]; then
     [ "$CLT_READY" = 1 ] || die 'Finish xcode-select --install first; no changes applied'
     [ "$BREW_BROKEN" = 0 ] || die 'Repair existing Homebrew first; no changes applied'

@@ -8,3 +8,4 @@ python3 "$REPO_ROOT/tests/test-tailscale-hardening.py"
 python3 "$REPO_ROOT/tests/test-github-auth.py"
 python3 "$REPO_ROOT/tests/test-shell-startup.py"
 
+python3 "$REPO_ROOT/tests/test-preview-service.py"
