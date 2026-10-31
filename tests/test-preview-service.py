@@ -198,7 +198,8 @@ class PreviewSetup(unittest.TestCase):
                             return json.dumps(routes)
                         self.assertEqual(args[1:], ['serve', '--bg', '--https=8443', '--yes', 'http://127.0.0.1:8787'])
                         self.assertFalse(kwargs['capture_output'])
-                        self.assertEqual(kwargs['timeout'], None if interactive else 30)
+                        awaiting_approval = interactive and '8443' not in routes.get('TCP', {})
+                        self.assertEqual(kwargs['timeout'], None if awaiting_approval else 30)
                         routes['Web']['mini.test.ts.net:8443'] = {'Handlers': {'/': {'Proxy': 'http://127.0.0.1:8787'}}}
                         routes['TCP'] = {'8443': {'HTTPS': True}}
                     return ''

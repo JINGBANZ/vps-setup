@@ -334,7 +334,8 @@ def install(interactive=False):
               'Setup will continue automatically after approval. Press Ctrl+C to cancel.', flush=True)
     # The endpoint is fixed: unrelated routes are never reset or replaced.
     run([tailscale, 'serve', '--bg', '--https=8443', '--yes', 'http://127.0.0.1:8787'],
-        privileged=not gui_tailscale, capture_output=False, timeout=None if interactive else 30)
+        privileged=not gui_tailscale, capture_output=False,
+        timeout=None if interactive and not https_ready else 30)
     check_routes(json.loads(run([tailscale, 'serve', 'status', '--json'], timeout=15)), dns, True, required=True)
     for path, data in skill.items():
         write_user(canonical / path, data, 0o644)
